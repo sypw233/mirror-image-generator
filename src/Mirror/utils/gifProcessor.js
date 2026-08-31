@@ -34,20 +34,26 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     frameCtx.putImageData(imageData, 0, 0)
 
     const mirrored = mirrorFrame(frameCanvas, direction, ratio, keepOriginalSize)
+
+    let delay = frame.delay || 10
+    if (delay > 0 && delay < 10) {
+      delay = 10
+    }
+
     canvases.push({
       canvas: mirrored,
-      delay: frame.delay ? frame.delay * 10 : 100
+      delay
     })
 
-    if (onProgress) {
+    if (onProgress && i % 5 === 0) {
       onProgress(Math.round(((i + 1) / totalFrames) * 50))
     }
   }
 
   const firstCanvas = canvases[0].canvas
   const encoder = new GIF({
-    workers: 2,
-    quality: 10,
+    workers: 4,
+    quality: 30,
     width: firstCanvas.width,
     height: firstCanvas.height,
     workerScript: 'gif.worker.js'
@@ -68,9 +74,6 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
         delay: canvases[i].delay,
         copy: true
       })
-      if (onProgress) {
-        onProgress(50 + Math.round(((i + 1) / canvases.length) * 50))
-      }
     }
 
     encoder.render()
@@ -82,7 +85,7 @@ export function getGifMetadata (arrayBuffer) {
   const frames = decompressFrames(gif, true)
   let totalDelay = 0
   for (const frame of frames) {
-    totalDelay += frame.delay ? frame.delay * 10 : 100
+    totalDelay += frame.delay || 10
   }
   const firstFrame = frames[0]
   return {
