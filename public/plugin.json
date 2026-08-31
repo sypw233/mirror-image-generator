@@ -1,0 +1,23 @@
+{
+  "main": "index.html",
+  "preload": "preload/services.js",
+  "logo": "logo.png",
+  "development": {
+    "main": "http://localhost:5173"
+  },
+  "features": [
+    {
+      "code": "mirror",
+      "explain": "图片镜像对称生成工具，支持静态图和GIF",
+      "cmds": [
+        "镜像",
+        "镜像图片",
+        "图片镜像",
+        {
+          "type": "img",
+          "label": "镜像图片"
+        }
+      ]
+    }
+  ]
+}
