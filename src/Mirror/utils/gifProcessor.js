@@ -19,22 +19,24 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
 
   for (let i = 0; i < totalFrames; i++) {
     const frame = frames[i]
+    const { width: fw, height: fh } = frame.dims
+
     const frameCanvas = document.createElement('canvas')
-    frameCanvas.width = frame.width
-    frameCanvas.height = frame.height
+    frameCanvas.width = fw
+    frameCanvas.height = fh
     const frameCtx = frameCanvas.getContext('2d')
 
     const imageData = new ImageData(
-      new Uint8ClampedArray(frame.frame),
-      frame.width,
-      frame.height
+      new Uint8ClampedArray(frame.patch),
+      fw,
+      fh
     )
     frameCtx.putImageData(imageData, 0, 0)
 
     const mirrored = mirrorFrame(frameCanvas, direction, ratio, keepOriginalSize)
     canvases.push({
       canvas: mirrored,
-      delay: frame.delay || 100
+      delay: frame.delay ? frame.delay * 10 : 100
     })
 
     if (onProgress) {
@@ -80,14 +82,15 @@ export function getGifMetadata (arrayBuffer) {
   const frames = decompressFrames(gif, true)
   let totalDelay = 0
   for (const frame of frames) {
-    totalDelay += frame.delay || 100
+    totalDelay += frame.delay ? frame.delay * 10 : 100
   }
+  const firstFrame = frames[0]
   return {
     frameCount: frames.length,
     totalDelay,
     firstFrame: {
-      width: frames[0]?.width || 0,
-      height: frames[0]?.height || 0
+      width: firstFrame?.dims?.width || 0,
+      height: firstFrame?.dims?.height || 0
     }
   }
 }
