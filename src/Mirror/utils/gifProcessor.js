@@ -10,6 +10,31 @@ export function isGifBuffer (buffer) {
     bytes[3] === 0x38
 }
 
+function applyTransparency (pixels, frame, width, height) {
+  const result = new Uint8ClampedArray(pixels.length)
+  result.set(pixels)
+
+  if (frame.transparentIndex != null && frame.transparentIndex >= 0) {
+    const colorTable = frame.colorTable
+    if (colorTable) {
+      const tr = colorTable[frame.transparentIndex * 3]
+      const tg = colorTable[frame.transparentIndex * 3 + 1]
+      const tb = colorTable[frame.transparentIndex * 3 + 2]
+
+      for (let i = 0; i < width * height; i++) {
+        const r = result[i * 4]
+        const g = result[i * 4 + 1]
+        const b = result[i * 4 + 2]
+        if (r === tr && g === tg && b === tb) {
+          result[i * 4 + 3] = 0
+        }
+      }
+    }
+  }
+
+  return result
+}
+
 export async function processGif (arrayBuffer, direction, ratio, keepOriginalSize, onProgress) {
   const gif = parseGIF(arrayBuffer)
   const frames = decompressFrames(gif, true)
@@ -26,11 +51,9 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     frameCanvas.height = fh
     const frameCtx = frameCanvas.getContext('2d')
 
-    const imageData = new ImageData(
-      new Uint8ClampedArray(frame.patch),
-      fw,
-      fh
-    )
+    const pixels = applyTransparency(frame.patch, frame, fw, fh)
+
+    const imageData = new ImageData(pixels, fw, fh)
     frameCtx.putImageData(imageData, 0, 0)
 
     const mirrored = mirrorFrame(frameCanvas, direction, ratio, keepOriginalSize)
@@ -56,7 +79,9 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     quality: 30,
     width: firstCanvas.width,
     height: firstCanvas.height,
-    workerScript: 'gif.worker.js'
+    workerScript: 'gif.worker.js',
+    transparent: null,
+    background: null
   })
 
   return new Promise((resolve, reject) => {
@@ -72,7 +97,8 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     for (let i = 0; i < canvases.length; i++) {
       encoder.addFrame(canvases[i].canvas, {
         delay: canvases[i].delay,
-        copy: true
+        copy: true,
+        transparent: null
       })
     }
 
