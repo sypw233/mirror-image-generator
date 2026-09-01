@@ -13,26 +13,49 @@ export function isGifBuffer (buffer) {
     bytes[3] === 0x38
 }
 
+function buildGlobalPalette (frames) {
+  const colorMap = new Map()
+  for (const frame of frames) {
+    const ct = frame.colorTable
+    if (!ct) continue
+    for (let i = 0; i < ct.length; i += 3) {
+      const key = `${ct[i]},${ct[i + 1]},${ct[i + 2]}`
+      if (!colorMap.has(key)) {
+        colorMap.set(key, [ct[i], ct[i + 1], ct[i + 2]])
+      }
+    }
+  }
+
+  const palette = Array.from(colorMap.values()).flat()
+  const palLen = palette.length / 3
+
+  if (palLen < 256) {
+    const transparentEntry = TRANSPARENT_RGB
+    let hasTransparent = false
+    for (let i = 0; i < palLen; i++) {
+      if (palette[i * 3] === transparentEntry[0] &&
+          palette[i * 3 + 1] === transparentEntry[1] &&
+          palette[i * 3 + 2] === transparentEntry[2]) {
+        hasTransparent = true
+        break
+      }
+    }
+    if (!hasTransparent) {
+      palette.push(...transparentEntry)
+    }
+  }
+
+  while (palette.length < 256 * 3) {
+    palette.push(0)
+  }
+
+  return new Uint8Array(palette.slice(0, 256 * 3))
+}
+
 function prepareFrameForGif (canvas) {
   const ctx = canvas.getContext('2d')
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
   const data = imageData.data
-  let hasTransparent = false
-  let hasKeyColor = false
-
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] === 0) {
-      hasTransparent = true
-    } else if (
-      data[i] === TRANSPARENT_RGB[0] &&
-      data[i + 1] === TRANSPARENT_RGB[1] &&
-      data[i + 2] === TRANSPARENT_RGB[2]
-    ) {
-      hasKeyColor = true
-    }
-  }
-
-  if (!hasTransparent) return canvas
 
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] === 0) {
@@ -41,14 +64,6 @@ function prepareFrameForGif (canvas) {
       data[i + 2] = TRANSPARENT_RGB[2]
       data[i + 3] = 255
     }
-  }
-
-  if (!hasKeyColor) {
-    const lastPixel = data.length - 4
-    data[lastPixel] = TRANSPARENT_RGB[0]
-    data[lastPixel + 1] = TRANSPARENT_RGB[1]
-    data[lastPixel + 2] = TRANSPARENT_RGB[2]
-    data[lastPixel + 3] = 255
   }
 
   ctx.putImageData(imageData, 0, 0)
@@ -97,13 +112,16 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
   }
 
   const firstCanvas = canvases[0].canvas
+  const palette = buildGlobalPalette(frames)
+
   const encoder = new GIF({
     workers: 4,
-    quality: 30,
+    quality: 10,
     width: firstCanvas.width,
     height: firstCanvas.height,
     workerScript: 'gif.worker.js',
-    transparent: TRANSPARENT_NUM
+    transparent: TRANSPARENT_NUM,
+    globalPalette: palette
   })
 
   return new Promise((resolve, reject) => {
