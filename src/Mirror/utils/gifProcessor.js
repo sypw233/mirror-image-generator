@@ -2,7 +2,8 @@ import { parseGIF, decompressFrames } from 'gifuct-js'
 import GIF from 'gif.js'
 import { mirrorFrame } from './mirror'
 
-const TRANSPARENT_COLOR = [255, 0, 255]
+const TRANSPARENT_RGB = [255, 0, 255]
+const TRANSPARENT_NUM = (255 << 16) | (0 << 8) | 255
 
 export function isGifBuffer (buffer) {
   const bytes = new Uint8Array(buffer)
@@ -23,9 +24,9 @@ function prepareFrameForGif (canvas) {
     if (data[i + 3] === 0) {
       hasTransparent = true
     } else if (
-      data[i] === TRANSPARENT_COLOR[0] &&
-      data[i + 1] === TRANSPARENT_COLOR[1] &&
-      data[i + 2] === TRANSPARENT_COLOR[2]
+      data[i] === TRANSPARENT_RGB[0] &&
+      data[i + 1] === TRANSPARENT_RGB[1] &&
+      data[i + 2] === TRANSPARENT_RGB[2]
     ) {
       hasKeyColor = true
     }
@@ -35,18 +36,18 @@ function prepareFrameForGif (canvas) {
 
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] === 0) {
-      data[i] = TRANSPARENT_COLOR[0]
-      data[i + 1] = TRANSPARENT_COLOR[1]
-      data[i + 2] = TRANSPARENT_COLOR[2]
+      data[i] = TRANSPARENT_RGB[0]
+      data[i + 1] = TRANSPARENT_RGB[1]
+      data[i + 2] = TRANSPARENT_RGB[2]
       data[i + 3] = 255
     }
   }
 
   if (!hasKeyColor) {
     const lastPixel = data.length - 4
-    data[lastPixel] = TRANSPARENT_COLOR[0]
-    data[lastPixel + 1] = TRANSPARENT_COLOR[1]
-    data[lastPixel + 2] = TRANSPARENT_COLOR[2]
+    data[lastPixel] = TRANSPARENT_RGB[0]
+    data[lastPixel + 1] = TRANSPARENT_RGB[1]
+    data[lastPixel + 2] = TRANSPARENT_RGB[2]
     data[lastPixel + 3] = 255
   }
 
@@ -102,7 +103,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     width: firstCanvas.width,
     height: firstCanvas.height,
     workerScript: 'gif.worker.js',
-    transparent: TRANSPARENT_COLOR
+    transparent: TRANSPARENT_NUM
   })
 
   return new Promise((resolve, reject) => {
