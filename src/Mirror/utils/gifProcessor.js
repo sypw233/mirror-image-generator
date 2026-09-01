@@ -2,7 +2,7 @@ import { parseGIF, decompressFrames } from 'gifuct-js'
 import GIF from 'gif.js'
 import { mirrorFrame } from './mirror'
 
-const TRANSPARENT_KEY_COLOR = [255, 0, 255]
+const TRANSPARENT_COLOR = [255, 0, 255]
 
 export function isGifBuffer (buffer) {
   const bytes = new Uint8Array(buffer)
@@ -12,18 +12,42 @@ export function isGifBuffer (buffer) {
     bytes[3] === 0x38
 }
 
-function replaceTransparentPixels (canvas) {
+function prepareFrameForGif (canvas) {
   const ctx = canvas.getContext('2d')
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
   const data = imageData.data
+  let hasTransparent = false
+  let hasKeyColor = false
 
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] === 0) {
-      data[i] = TRANSPARENT_KEY_COLOR[0]
-      data[i + 1] = TRANSPARENT_KEY_COLOR[1]
-      data[i + 2] = TRANSPARENT_KEY_COLOR[2]
+      hasTransparent = true
+    } else if (
+      data[i] === TRANSPARENT_COLOR[0] &&
+      data[i + 1] === TRANSPARENT_COLOR[1] &&
+      data[i + 2] === TRANSPARENT_COLOR[2]
+    ) {
+      hasKeyColor = true
+    }
+  }
+
+  if (!hasTransparent) return canvas
+
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) {
+      data[i] = TRANSPARENT_COLOR[0]
+      data[i + 1] = TRANSPARENT_COLOR[1]
+      data[i + 2] = TRANSPARENT_COLOR[2]
       data[i + 3] = 255
     }
+  }
+
+  if (!hasKeyColor) {
+    const lastPixel = data.length - 4
+    data[lastPixel] = TRANSPARENT_COLOR[0]
+    data[lastPixel + 1] = TRANSPARENT_COLOR[1]
+    data[lastPixel + 2] = TRANSPARENT_COLOR[2]
+    data[lastPixel + 3] = 255
   }
 
   ctx.putImageData(imageData, 0, 0)
@@ -54,7 +78,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     frameCtx.putImageData(imageData, 0, 0)
 
     const mirrored = mirrorFrame(frameCanvas, direction, ratio, keepOriginalSize)
-    replaceTransparentPixels(mirrored)
+    prepareFrameForGif(mirrored)
 
     let delay = frame.delay || 10
     if (delay > 0 && delay < 10) {
@@ -78,7 +102,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     width: firstCanvas.width,
     height: firstCanvas.height,
     workerScript: 'gif.worker.js',
-    transparent: TRANSPARENT_KEY_COLOR
+    transparent: TRANSPARENT_COLOR
   })
 
   return new Promise((resolve, reject) => {
