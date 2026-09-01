@@ -15,41 +15,43 @@ export function isGifBuffer (buffer) {
 
 function buildGlobalPalette (frames) {
   const colorMap = new Map()
+
   for (const frame of frames) {
     const ct = frame.colorTable
     if (!ct) continue
-    for (let i = 0; i < ct.length; i += 3) {
-      const key = `${ct[i]},${ct[i + 1]},${ct[i + 2]}`
+    for (let i = 0; i < ct.length; i++) {
+      const entry = ct[i]
+      const r = entry[0], g = entry[1], b = entry[2]
+      const key = (r << 16) | (g << 8) | b
       if (!colorMap.has(key)) {
-        colorMap.set(key, [ct[i], ct[i + 1], ct[i + 2]])
+        colorMap.set(key, [r, g, b])
       }
     }
   }
 
-  const palette = Array.from(colorMap.values()).flat()
-  const palLen = palette.length / 3
+  const palette = []
+  for (const rgb of colorMap.values()) {
+    palette.push(rgb[0], rgb[1], rgb[2])
+  }
 
-  if (palLen < 256) {
-    const transparentEntry = TRANSPARENT_RGB
-    let hasTransparent = false
-    for (let i = 0; i < palLen; i++) {
-      if (palette[i * 3] === transparentEntry[0] &&
-          palette[i * 3 + 1] === transparentEntry[1] &&
-          palette[i * 3 + 2] === transparentEntry[2]) {
-        hasTransparent = true
-        break
-      }
+  let hasTransparent = false
+  for (let i = 0; i < palette.length; i += 3) {
+    if (palette[i] === TRANSPARENT_RGB[0] &&
+        palette[i + 1] === TRANSPARENT_RGB[1] &&
+        palette[i + 2] === TRANSPARENT_RGB[2]) {
+      hasTransparent = true
+      break
     }
-    if (!hasTransparent) {
-      palette.push(...transparentEntry)
-    }
+  }
+  if (!hasTransparent) {
+    palette.push(...TRANSPARENT_RGB)
   }
 
   while (palette.length < 256 * 3) {
     palette.push(0)
   }
 
-  return new Uint8Array(palette.slice(0, 256 * 3))
+  return palette.slice(0, 256 * 3)
 }
 
 function prepareFrameForGif (canvas) {
