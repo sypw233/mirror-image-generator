@@ -2,6 +2,8 @@ import { parseGIF, decompressFrames } from 'gifuct-js'
 import GIF from 'gif.js'
 import { mirrorFrame } from './mirror'
 
+const TRANSPARENT_KEY_COLOR = [255, 0, 255]
+
 export function isGifBuffer (buffer) {
   const bytes = new Uint8Array(buffer)
   return bytes[0] === 0x47 &&
@@ -10,29 +12,22 @@ export function isGifBuffer (buffer) {
     bytes[3] === 0x38
 }
 
-function applyTransparency (pixels, frame, width, height) {
-  const result = new Uint8ClampedArray(pixels.length)
-  result.set(pixels)
+function replaceTransparentPixels (canvas) {
+  const ctx = canvas.getContext('2d')
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const data = imageData.data
 
-  if (frame.transparentIndex != null && frame.transparentIndex >= 0) {
-    const colorTable = frame.colorTable
-    if (colorTable) {
-      const tr = colorTable[frame.transparentIndex * 3]
-      const tg = colorTable[frame.transparentIndex * 3 + 1]
-      const tb = colorTable[frame.transparentIndex * 3 + 2]
-
-      for (let i = 0; i < width * height; i++) {
-        const r = result[i * 4]
-        const g = result[i * 4 + 1]
-        const b = result[i * 4 + 2]
-        if (r === tr && g === tg && b === tb) {
-          result[i * 4 + 3] = 0
-        }
-      }
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) {
+      data[i] = TRANSPARENT_KEY_COLOR[0]
+      data[i + 1] = TRANSPARENT_KEY_COLOR[1]
+      data[i + 2] = TRANSPARENT_KEY_COLOR[2]
+      data[i + 3] = 255
     }
   }
 
-  return result
+  ctx.putImageData(imageData, 0, 0)
+  return canvas
 }
 
 export async function processGif (arrayBuffer, direction, ratio, keepOriginalSize, onProgress) {
@@ -51,12 +46,15 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     frameCanvas.height = fh
     const frameCtx = frameCanvas.getContext('2d')
 
-    const pixels = applyTransparency(frame.patch, frame, fw, fh)
-
-    const imageData = new ImageData(pixels, fw, fh)
+    const imageData = new ImageData(
+      new Uint8ClampedArray(frame.patch),
+      fw,
+      fh
+    )
     frameCtx.putImageData(imageData, 0, 0)
 
     const mirrored = mirrorFrame(frameCanvas, direction, ratio, keepOriginalSize)
+    replaceTransparentPixels(mirrored)
 
     let delay = frame.delay || 10
     if (delay > 0 && delay < 10) {
@@ -80,8 +78,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     width: firstCanvas.width,
     height: firstCanvas.height,
     workerScript: 'gif.worker.js',
-    transparent: null,
-    background: null
+    transparent: TRANSPARENT_KEY_COLOR
   })
 
   return new Promise((resolve, reject) => {
@@ -97,8 +94,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     for (let i = 0; i < canvases.length; i++) {
       encoder.addFrame(canvases[i].canvas, {
         delay: canvases[i].delay,
-        copy: true,
-        transparent: null
+        copy: true
       })
     }
 
