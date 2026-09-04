@@ -28,6 +28,7 @@ npm run lint       # 运行 JavaScript Standard Style 检查
 | 入口 | 说明 |
 | --- | --- |
 | `tests/browser-harness.html` | GIF 处理管线断言：帧数 / 画布尺寸 / 全画幅合成 / 帧延迟保持 / 镜像对称抽样 / 保持原尺寸等比缩放等 17 项 |
+| `tests/mirror-harness.html` | 静态图镜像算法断言：四方向尺寸 / 水平垂直对称性 / 镜像块位置 / keepOriginalSize 等比缩放 / 方向区分等 25 项 |
 | `tests/ui-test.html?type=png` | UI 集成测试（静态图场景，自动注入 base64 图片） |
 | `tests/ui-test.html?type=gif` | UI 集成测试（GIF 场景，验证局部帧合成与透明背景） |
 
@@ -52,3 +53,12 @@ npm run lint       # 运行 JavaScript Standard Style 检查
 - **Worker 路径**：GIF 编码 Worker 从 `public/` 迁移为 `src/Mirror/utils/gif.worker.js` + `import ... ?url`，由 Vite 打包，避免子路径页面下解析到 SPA 兜底 HTML 导致进度卡死
 - **保持原尺寸**：修复为等比缩放居中，比例 > 50% 时不再裁切
 - **进度平滑**：处理进度从"卡 50% 后跳 100%"改为平滑 10% → 55% → 100%
+
+## 主要改动记录（第二轮：性能与体验）
+- **GIF 帧合成性能**：`clearRect` / `drawPatch` 从逐字节读写改为 Uint32 视角批量读写（`fill` 清零 + 单次打包写入像素），合成大图多帧时明显提速
+- **静态图镜像测试台**：新增 `tests/mirror-harness.html`，直接对 `mirrorImage` 做 25 项断言（四方向尺寸 / 对称性 / 镜像块位置 / keepOriginalSize 等比缩放 / 方向区分）
+- **设置持久化**：镜像方向 / 比例 / 保持原尺寸记忆到 localStorage，再次打开自动沿用上次设置
+- **处理中拖入保护**：处理进行中拖入新图不再静默取消，改为明确提示"正在处理中，请稍候"
+- **复制失败提示**：复制图片失败时显示错误提示，不再无反馈
+- **处理耗时显示**：结果信息栏追加处理耗时（如 `耗时 412ms`）
+- **lint 配置修正**：移除与代码风格冲突的 `jsx-quotes: prefer-double` 规则（standard 默认不启用该规则，且代码使用单引号）

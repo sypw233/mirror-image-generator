@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>静态图镜像算法测试台</title>
+<style>
+  body { font-family: -apple-system, 'PingFang SC', 'Segoe UI', sans-serif; background: #f5f6f8; margin: 0; padding: 20px; color: #222; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #777; font-size: 12px; margin-bottom: 16px; }
+  .summary { padding: 12px 16px; border-radius: 10px; font-weight: 600; margin-bottom: 16px; font-size: 14px; }
+  .summary.pass { background: #e6f7e6; color: #1a7f37; border: 1px solid #b7e0b7; }
+  .summary.fail { background: #fdecec; color: #c62828; border: 1px solid #f0b6b6; }
+  table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 10px; overflow: hidden; font-size: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  th, td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+  th { background: #f0f2f5; font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge.pass { background: #e6f7e6; color: #1a7f37; }
+  .badge.fail { background: #fdecec; color: #c62828; }
+  .mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; }
+  .dim { color: #888; }
+  #log { white-space: pre-wrap; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; background: #fff; border-radius: 10px; padding: 12px; margin-top: 16px; max-height: 300px; overflow: auto; }
+</style>
+</head>
+<body>
+  <h1>静态图镜像算法测试台</h1>
+  <div class="sub">测试真实管线：<span class="mono">mirrorImage</span>（canvas 裁剪 → 翻转拼接 → keepOriginalSize 等比缩放）</div>
+  <div id="summary" class="summary">运行中…</div>
+  <table id="results">
+    <thead><tr><th>用例</th><th>参数</th><th>断言</th><th>预期</th><th>实际</th><th>结果</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="log"></div>
+  <script type="module">
+    import { mirrorImage } from '/src/Mirror/utils/mirror.js'
+    const results = []
+    let failures = 0
+    function record (name, params, assertion, expected, actual, pass) {
+      if (!pass) failures++
+      results.push({ name, params, assertion, expected: JSON.stringify(expected), actual: JSON.stringify(actual), pass })
+      const tbody = document.querySelector('#results tbody')
+      const tr = document.createElement('tr')
+      tr.innerHTML = `
+        <td><b>${name}</b></td>
+        <td class="mono dim">${params}</td>
+        <td>${assertion}</td>
+        <td class="mono">${expected}</td>
+        <td class="mono">${actual}</td>
+        <td><span class="badge ${pass ? 'pass' : 'fail'}">${pass ? 'PASS' : 'FAIL'}</span></td>`
+      tbody.appendChild(tr)
+    }
+    const logEl = document.getElementById('log')
+    function log (msg) { logEl.textContent += msg + '\n' }
+    // ===== 非对称测试图案：80x60，四角特征色 + 中部斜线 =====
+    function makeTestCanvas (w, h) {
+      const c = document.createElement('canvas')
+      c.width = w; c.height = h
+      const ctx = c.getContext('2d')
+      ctx.fillStyle = '#4a90d9'; ctx.fillRect(0, 0, w, h) // 蓝色底
+      ctx.fillStyle = '#e74c3c'; ctx.fillRect(5, 5, 20, 15) // 左上红块
+      ctx.fillStyle = '#f1c40f'; ctx.fillRect(w - 25, h - 20, 20, 15) // 右下黄块
+      ctx.fillStyle = '#2ecc71'; ctx.fillRect(Math.floor(w / 2) - 6, Math.floor(h / 2) - 6, 12, 12) // 中心绿块
+      for (let i = 0; i < 20; i++) ctx.fillRect(8 + i * 2, 6 + i, 2, 2) // 非对称斜线
+      return c
+    }
+    function pixels (canvas) {
+      return canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data
+    }
+    function colorAt (data, w, x, y) {
+      const i = (y * w + x) * 4
+      return [data[i], data[i + 1], data[i + 2], data[i + 3]]
+    }
+    function same (a, b) {
+      return a.length === b.length && a.every((v, i) => v === b[i])
+    }
+    // 水平对称：关于垂直中轴 pixel(x,y) == pixel(W-1-x,y)
+    function checkHorizontalSym (canvas, pass) {
+      const d = pixels(canvas)
+      const W = canvas.width, H = canvas.height
+      let sym = true, checked = 0
+      for (let y = 0; y < H; y += 2) {
+        for (let x = 0; x < Math.floor(W / 2); x += 2) {
+          checked++
+          if (!same(colorAt(d, W, x, y), colorAt(d, W, W - 1 - x, y))) { sym = false; break }
+        }
+        if (!sym) break
+      }
+      return { sym, checked }
+    }
+    // 垂直对称：pixel(x,y) == pixel(x,H-1-y)
+    function checkVerticalSym (canvas, pass) {
+      const d = pixels(canvas)
+      const W = canvas.width, H = canvas.height
+      let sym = true, checked = 0
+      for (let x = 0; x < W; x += 2) {
+        for (let y = 0; y < Math.floor(H / 2); y += 2) {
+          checked++
+          if (!same(colorAt(d, W, x, y), colorAt(d, W, x, H - 1 - y))) { sym = false; break }
+        }
+        if (!sym) break
+      }
+      return { sym, checked }
+    }
+    const SRC = makeTestCanvas(80, 60)
+    const RED = [231, 76, 60, 255]
+    const YELLOW = [241, 196, 15, 255]
+    const GREEN = [46, 204, 113, 255]
+    const BLUE = [74, 144, 217, 255]
+    // ===== 尺寸断言 =====
+    const sizeCases = [
+      ['left', 50, false, '80x60'], ['right', 50, false, '80x60'],
+      ['top', 50, false, '80x60'], ['bottom', 50, false, '80x60'],
+      ['left', 30, false, '48x60'], ['right', 30, false, '48x60'],
+      ['top', 30, false, '80x36'], ['bottom', 30, false, '80x36'],
+      ['left', 100, false, '160x60'], ['top', 100, false, '80x120'],
+      ['left', 50, true, '80x60'], ['right', 50, true, '80x60'],
+      ['top', 100, true, '80x60'], ['bottom', 100, true, '80x60']
+    ]
+    for (const [dir, ratio, keep, expect] of sizeCases) {
+      const out = mirrorImage(SRC, dir, ratio, keep)
+      const actual = `${out.width}x${out.height}`
+      record('尺寸-' + dir + '-' + ratio + (keep ? '-keep' : ''), `${dir} ${ratio}% keep=${keep}`, '输出画布尺寸', expect, actual, actual === expect)
+    }
+    // ===== 对称性断言（50% 双倍宽/高场景） =====
+    {
+      const out = mirrorImage(SRC, 'left', 50, false)
+      const { sym, checked } = checkHorizontalSym(out)
+      record('对称-left', 'left 50% keep=false', '水平对称（右半=左半镜像，抽样 ' + checked + ' 点）', true, sym, sym)
+      // 内容位置：left 保留左侧原块，左上红块仍在左侧
+      const d = pixels(out)
+      const redLeft = same(colorAt(d, out.width, 8, 8), RED)
+      record('内容-left', 'left 50% keep=false', '左上红块保留在左侧（原块在左）', true, redLeft, redLeft)
+    }
+    {
+      const out = mirrorImage(SRC, 'right', 50, false)
+      const { sym, checked } = checkHorizontalSym(out)
+      record('对称-right', 'right 50% keep=false', '水平对称（左半=右半镜像，抽样 ' + checked + ' 点）', true, sym, sym)
+      // 内容位置：right 保留右侧原块，右下黄块仍在右侧
+      const d = pixels(out)
+      const yellowRight = same(colorAt(d, out.width, out.width - 8, out.height - 8), YELLOW)
+      record('内容-right', 'right 50% keep=false', '右下黄块保留在右侧（原块在右）', true, yellowRight, yellowRight)
+    }
+    {
+      const out = mirrorImage(SRC, 'top', 50, false)
+      const { sym, checked } = checkVerticalSym(out)
+      record('对称-top', 'top 50% keep=false', '垂直对称（下半=上半镜像，抽样 ' + checked + ' 点）', true, sym, sym)
+    }
+    {
+      const out = mirrorImage(SRC, 'bottom', 50, false)
+      const { sym, checked } = checkVerticalSym(out)
+      record('对称-bottom', 'bottom 50% keep=false', '垂直对称（上半=下半镜像，抽样 ' + checked + ' 点）', true, sym, sym)
+      // 内容位置：bottom 保留下部原块，右下黄块在下方
+      const d = pixels(out)
+      const yellowBottom = same(colorAt(d, out.width, out.width - 8, out.height - 8), YELLOW)
+      record('内容-bottom', 'bottom 50% keep=false', '右下黄块保留在下方（原块在下）', true, yellowBottom, yellowBottom)
+    }
+    // ===== keepOriginalSize 等比缩放（contain，不裁切） =====
+    {
+      const out = mirrorImage(SRC, 'left', 100, true) // comp=160x60 → scale=0.5 → 居中，上下留白
+      const d = pixels(out)
+      const W = out.width, H = out.height
+      const topAlpha = colorAt(d, W, Math.floor(W / 2), Math.floor(H * 0.06))[3]
+      const centerAlpha = colorAt(d, W, Math.floor(W / 2), Math.floor(H / 2))[3]
+      const fitOk = topAlpha === 0 && centerAlpha === 255
+      record('keep-left100', 'left 100% keep=true', '等比缩小居中（顶部留白 alpha=0，中心有内容 alpha=255）', '留白+内容', `top=${topAlpha} center=${centerAlpha}`, fitOk)
+    }
+    {
+      const out = mirrorImage(SRC, 'top', 100, true) // comp=80x120 → scale=0.5 → 居中，左右留白
+      const d = pixels(out)
+      const W = out.width, H = out.height
+      const leftAlpha = colorAt(d, W, Math.floor(W * 0.06), Math.floor(H / 2))[3]
+      const centerAlpha = colorAt(d, W, Math.floor(W / 2), Math.floor(H / 2))[3]
+      const fitOk = leftAlpha === 0 && centerAlpha === 255
+      record('keep-top100', 'top 100% keep=true', '等比缩小居中（左侧留白 alpha=0，中心有内容 alpha=255）', '留白+内容', `left=${leftAlpha} center=${centerAlpha}`, fitOk)
+    }
+    {
+      // left 50% keep=true：compW=80 不大于原宽，scale=1 不缩放，无留白
+      const out = mirrorImage(SRC, 'left', 50, true)
+      const d = pixels(out)
+      const W = out.width, H = out.height
+      const edgeAlpha = colorAt(d, W, Math.floor(W * 0.5) - 1, Math.floor(H / 2))[3]
+      const ok = out.width === 80 && out.height === 60 && edgeAlpha === 255
+      record('keep-left50', 'left 50% keep=true', 'compW≤原宽时 scale=1 不缩放、无留白', '80x60 且边缘不透明', `${out.width}x${out.height} edge=${edgeAlpha}`, ok)
+    }
+    // ===== 方向区分正确性：left 与 right 内容不应相同 =====
+    {
+      const left = mirrorImage(SRC, 'left', 50, false)
+      const right = mirrorImage(SRC, 'right', 50, false)
+      const dl = pixels(left)
+      const dr = pixels(right)
+      let differ = false
+      for (let i = 0; i < dl.length; i += 4) {
+        if (dl[i] !== dr[i] || dl[i + 1] !== dr[i + 1] || dl[i + 2] !== dr[i + 2]) { differ = true; break }
+      }
+      record('方向区分', 'left vs right 50%', 'left 与 right 输出内容不同', true, differ, differ)
+    }
+    log('源图: 80x60（蓝底 + 左上红块 + 右下黄块 + 中心绿块 + 斜线）')
+    log('尺寸断言 ' + sizeCases.length + ' 项 + 对称/内容/等比缩放断言 ' + (results.length - sizeCases.length) + ' 项，共 ' + results.length + ' 项')
+    // 汇总
+    const sum = document.getElementById('summary')
+    if (failures === 0) {
+      sum.className = 'summary pass'
+      sum.textContent = `✅ 全部通过（${results.length} 项断言）`
+    } else {
+      sum.className = 'summary fail'
+      sum.textContent = `❌ ${failures} 项失败 / 共 ${results.length} 项断言`
+    }
+  </script>
+</body>
+</html>
