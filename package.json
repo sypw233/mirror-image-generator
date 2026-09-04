@@ -2,7 +2,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "lint": "standard \"src/**/*.{js,jsx}\""
   },
   "dependencies": {
     "gif.js": "^0.2.0",

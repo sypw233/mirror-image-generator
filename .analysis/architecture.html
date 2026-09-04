@@ -1,0 +1,101 @@
+<html style="margin:0;padding:0;">
+<div style="background-color:transparent;box-sizing:border-box;font-family:'Roboto','PingFang SC','Segoe UI',Arial,sans-serif;color:#1A1B1C;--accent:#A3D5E8;">
+  <div style="padding:16px;box-sizing:border-box;">
+    <div style="font-size:15px;font-weight:600;margin-bottom:4px;">mirror-image-generator · 模块架构与数据流（示意）</div>
+    <div style="font-size:12px;color:#6B7280;margin-bottom:16px;">uTools 图片镜像插件 · React 19 + Vite 6 · 静态图与 GIF 均支持</div>
+
+    <!-- 宿主环境 -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <div style="flex:1 1 200px;min-width:0;padding:10px 12px;background:rgba(163,213,232,0.18);border:1px solid rgba(163,213,232,0.7);border-radius:12px;box-sizing:border-box;">
+        <div style="font-size:13px;font-weight:600;">宿主环境</div>
+        <div style="font-size:12px;color:#374151;margin-top:2px;">uTools 插件（plugin.json 定义 feature「mirror」，命令：镜像 / 镜像图片 / 图片镜像）<br/>浏览器开发模式（window.utools 不存在时默认进入 mirror 路由）</div>
+      </div>
+      <div style="flex:1 1 200px;min-width:0;padding:10px 12px;background:rgba(163,213,232,0.10);border:1px dashed rgba(163,213,232,0.8);border-radius:12px;box-sizing:border-box;">
+        <div style="font-size:13px;font-weight:600;">preload 桥接（public/preload/services.js）</div>
+        <div style="font-size:12px;color:#374151;margin-top:2px;">向 window.services 注入 Node 能力：readFile / readFileBuffer / writeTextFile / writeImageFile / writeGifFile</div>
+      </div>
+    </div>
+
+    <!-- 箭头 -->
+    <div style="display:flex;justify-content:center;color:#9EACEA;font-size:14px;margin:2px 0;">▼</div>
+
+    <!-- 入口层 -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <div style="flex:1 1 130px;min-width:0;padding:10px 12px;border:1px solid rgba(0,0,0,0.08);background:rgba(0,0,0,0.025);border-radius:12px;box-sizing:border-box;text-align:center;">
+        <div style="font-size:12.5px;font-weight:600;">index.html</div>
+        <div style="font-size:11px;color:#6B7280;">挂载 #root</div>
+      </div>
+      <div style="color:#9EACEA;">→</div>
+      <div style="flex:1 1 130px;min-width:0;padding:10px 12px;border:1px solid rgba(0,0,0,0.08);background:rgba(0,0,0,0.025);border-radius:12px;box-sizing:border-box;text-align:center;">
+        <div style="font-size:12.5px;font-weight:600;">main.jsx</div>
+        <div style="font-size:11px;color:#6B7280;">ReactDOM 渲染</div>
+      </div>
+      <div style="color:#9EACEA;">→</div>
+      <div style="flex:2 1 260px;min-width:0;padding:10px 12px;border:1px solid rgba(163,213,232,0.9);background:rgba(163,213,232,0.15);border-radius:12px;box-sizing:border-box;">
+        <div style="font-size:12.5px;font-weight:600;">App.jsx · 路由分发</div>
+        <div style="font-size:11.5px;color:#374151;margin-top:3px;">utools.onPluginEnter(action.code) → mirror（主）｜read 文件读取｜write 文件写入｜hello 调试页</div>
+      </div>
+    </div>
+
+    <!-- 箭头 -->
+    <div style="display:flex;justify-content:center;color:#9EACEA;font-size:14px;margin:2px 0;">▼</div>
+
+    <!-- Mirror 组件层 -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+      <div style="flex:1 1 200px;min-width:0;padding:10px 12px;background:rgba(163,213,232,0.22);border:1px solid rgba(163,213,232,0.8);border-radius:12px;box-sizing:border-box;">
+        <div style="font-size:13px;font-weight:600;">Mirror/index.jsx（主控组件）</div>
+        <div style="font-size:11.5px;color:#374151;margin-top:3px;">图片加载 / 状态管理（direction、ratio、keepOriginalSize）/ 触发处理与进度</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">
+          <div style="padding:4px 8px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;font-size:11px;color:#1A1B1C;">ImageUploader<br/>拖拽/选择</div>
+          <div style="padding:4px 8px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;font-size:11px;color:#1A1B1C;">MirrorControls<br/>方向/比例/尺寸</div>
+          <div style="padding:4px 8px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;font-size:11px;color:#1A1B1C;">ImagePreview<br/>对比/下载/复制</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 箭头 -->
+    <div style="display:flex;justify-content:center;color:#9EACEA;font-size:14px;margin:2px 0;">▼</div>
+
+    <!-- 处理核心层 -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+      <div style="flex:1 1 190px;min-width:0;padding:10px 12px;border:1px solid rgba(0,0,0,0.08);background:#fff;border-radius:12px;box-sizing:border-box;">
+        <div style="font-size:12.5px;font-weight:600;">utils/mirror.js</div>
+        <div style="font-size:11.5px;color:#374151;margin-top:3px;">核心算法 mirrorImage()：4 方向裁剪 + canvas 水平/垂直翻转拼接，支持保持原尺寸；静态图输出 PNG</div>
+      </div>
+      <div style="flex:1 1 190px;min-width:0;padding:10px 12px;border:1px solid rgba(0,0,0,0.08);background:#fff;border-radius:12px;box-sizing:border-box;">
+        <div style="font-size:12.5px;font-weight:600;">utils/gifProcessor.js</div>
+        <div style="font-size:11.5px;color:#374151;margin-top:3px;">gifuct-js 解码逐帧 → 逐帧镜像 + 透明色处理 → gif.js 编码重排输出</div>
+      </div>
+      <div style="flex:1 1 190px;min-width:0;padding:10px 12px;border:1px solid rgba(0,0,0,0.08);background:#fff;border-radius:12px;box-sizing:border-box;">
+        <div style="font-size:12.5px;font-weight:600;">utils/fileHelper.js</div>
+        <div style="font-size:11.5px;color:#374151;margin-top:3px;">格式识别 / 文件读取（uTools 与浏览器双通道）/ 保存下载 / 复制到剪贴板</div>
+      </div>
+    </div>
+
+    <!-- 底部数据流 -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 12px;background:rgba(0,0,0,0.025);border:1px solid rgba(0,0,0,0.08);border-radius:12px;box-sizing:border-box;">
+      <div style="font-size:12.5px;font-weight:600;width:100%;margin-bottom:2px;">端到端数据流</div>
+      <div style="padding:5px 10px;background:rgba(163,213,232,0.25);border-radius:8px;font-size:11.5px;">输入图片<br/>PNG/JPG/GIF/BMP/WebP</div>
+      <div style="color:#9EACEA;font-size:13px;">→</div>
+      <div style="padding:5px 10px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;font-size:11.5px;">按方向裁剪比例<br/>left/right/top/bottom × ratio</div>
+      <div style="color:#9EACEA;font-size:13px;">→</div>
+      <div style="padding:5px 10px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;font-size:11.5px;">镜像翻转拼接<br/>canvas scale(-1,1)/(1,-1)</div>
+      <div style="color:#9EACEA;font-size:13px;">→</div>
+      <div style="padding:5px 10px;background:#fff;border:1px solid rgba(0,0,0,0.08);border-radius:8px;font-size:11.5px;">编码输出<br/>静态图 PNG / GIF 重编码</div>
+      <div style="color:#9EACEA;font-size:13px;">→</div>
+      <div style="padding:5px 10px;background:rgba(82,196,26,0.12);border:1px solid rgba(82,196,26,0.4);border-radius:8px;font-size:11.5px;">下载 xxx_mirror.gif/png<br/>或复制到剪贴板</div>
+    </div>
+
+    <!-- 依赖 -->
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px solid rgba(0,0,0,0.08);background:#fff;border-radius:12px;box-sizing:border-box;">
+      <div style="font-size:12.5px;font-weight:600;width:100%;margin-bottom:2px;">第三方依赖</div>
+      <div style="padding:4px 10px;background:rgba(0,0,0,0.03);border-radius:8px;font-size:11px;color:#374151;">React 19</div>
+      <div style="padding:4px 10px;background:rgba(0,0,0,0.03);border-radius:8px;font-size:11px;color:#374151;">Vite 6</div>
+      <div style="padding:4px 10px;background:rgba(0,0,0,0.03);border-radius:8px;font-size:11px;color:#374151;">gifuct-js 2.1.2（GIF 解码）</div>
+      <div style="padding:4px 10px;background:rgba(0,0,0,0.03);border-radius:8px;font-size:11px;color:#374151;">gif.js 0.2.0（GIF 编码，Worker 渲染）</div>
+      <div style="padding:4px 10px;background:rgba(0,0,0,0.03);border-radius:8px;font-size:11px;color:#374151;">utools-api-types（类型声明）</div>
+      <div style="padding:4px 10px;background:rgba(0,0,0,0.03);border-radius:8px;font-size:11px;color:#374151;">GitHub Actions → Pages（CI 部署）</div>
+    </div>
+  </div>
+</div>
+</html>

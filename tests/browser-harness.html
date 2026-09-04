@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GIF 镜像处理测试台</title>
+<style>
+  body { font-family: -apple-system, 'PingFang SC', 'Segoe UI', sans-serif; background: #f5f6f8; margin: 0; padding: 20px; color: #222; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: #777; font-size: 12px; margin-bottom: 16px; }
+  .summary { padding: 12px 16px; border-radius: 10px; font-weight: 600; margin-bottom: 16px; font-size: 14px; }
+  .summary.pass { background: #e6f7e6; color: #1a7f37; border: 1px solid #b7e0b7; }
+  .summary.fail { background: #fdecec; color: #c62828; border: 1px solid #f0b6b6; }
+  table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 10px; overflow: hidden; font-size: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  th, td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; vertical-align: top; }
+  th { background: #f0f2f5; font-size: 12px; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+  .badge.pass { background: #e6f7e6; color: #1a7f37; }
+  .badge.fail { background: #fdecec; color: #c62828; }
+  .mono { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; }
+  .dim { color: #888; }
+  #log { white-space: pre-wrap; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; background: #fff; border-radius: 10px; padding: 12px; margin-top: 16px; max-height: 300px; overflow: auto; }
+</style>
+</head>
+<body>
+  <h1>GIF 镜像处理测试台</h1>
+  <div class="sub">测试真实处理管线：<span class="mono">processGif</span>（gifuct-js 解码 → 帧合成/镜像 → gif.js 编码）</div>
+  <div id="summary" class="summary">运行中…</div>
+  <table id="results">
+    <thead><tr><th>用例</th><th>参数</th><th>断言</th><th>预期</th><th>实际</th><th>结果</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="log"></div>
+  <script type="module">
+    import { parseGIF, decompressFrames } from 'gifuct-js'
+    import { processGif } from '/src/Mirror/utils/gifProcessor.js'
+    const results = []
+    let failures = 0
+    function record (name, params, assertion, expected, actual, pass) {
+      if (!pass) failures++
+      results.push({ name, params, assertion, expected: JSON.stringify(expected), actual: JSON.stringify(actual), pass })
+      renderRow(results.length - 1)
+    }
+    function renderRow (i) {
+      const r = results[i]
+      const tbody = document.querySelector('#results tbody')
+      const tr = document.createElement('tr')
+      tr.innerHTML = `
+        <td><b>${r.name}</b></td>
+        <td class="mono dim">${r.params}</td>
+        <td>${r.assertion}</td>
+        <td class="mono">${r.expected}</td>
+        <td class="mono">${r.actual}</td>
+        <td><span class="badge ${r.pass ? 'pass' : 'fail'}">${r.pass ? 'PASS' : 'FAIL'}</span></td>`
+      tbody.appendChild(tr)
+    }
+    async function fetchBuffer (path) {
+      const res = await fetch(path)
+      const ab = await res.arrayBuffer()
+      return ab
+    }
+    function parseOut (buffer) {
+      const gif = parseGIF(buffer)
+      const frames = decompressFrames(gif, true)
+      return { gif, frames }
+    }
+    const logEl = document.getElementById('log')
+    async function runCase (name, file, direction, ratio, keep, checks) {
+      const ab = await fetchBuffer('/test/' + file)
+      const inp = parseOut(ab)
+      logEl.textContent += `\n[${name}] 输入 canvas=${inp.gif.lsd.width}x${inp.gif.lsd.height} frames=${inp.frames.length}\n`
+      inp.frames.forEach((f, i) => {
+        logEl.textContent += `  #${i} dims(${f.dims.left},${f.dims.top},${f.dims.width}x${f.dims.height}) delay=${f.delay} disp=${f.disposalType}\n`
+      })
+      const t0 = performance.now()
+      let progress = []
+      const blob = await processGif(ab, direction, ratio, keep, (p) => progress.push(p))
+      const t1 = performance.now()
+      const out = parseOut(await blob.arrayBuffer())
+      logEl.textContent += `  输出 canvas=${out.gif.lsd.width}x${out.gif.lsd.height} frames=${out.frames.length} 耗时=${(t1 - t0).toFixed(0)}ms progress=${progress.join(',')}\n`
+      out.frames.forEach((f, i) => {
+        logEl.textContent += `  #${i} dims(${f.dims.left},${f.dims.top},${f.dims.width}x${f.dims.height}) delay=${f.delay} disp=${f.disposalType}\n`
+      })
+      const params = `${direction} ${ratio}% keep=${keep}`
+      await checks(inp, out, params)
+    }
+    // 像素对称校验：加载一张图到 canvas，检查镜像对称性
+    function frameToCanvas (frame, canvasW, canvasH) {
+      // 用帧 patch 构建完整画布（测试用简化：直接把 patch 放 0,0）
+      const c = document.createElement('canvas')
+      c.width = canvasW
+      c.height = canvasH
+      const ctx = c.getContext('2d')
+      const img = new ImageData(new Uint8ClampedArray(frame.patch), frame.dims.width, frame.dims.height)
+      ctx.putImageData(img, frame.dims.left, frame.dims.top)
+      return c
+    }
+    const checks_full = async (inp, out) => {
+      const p = 'left 50% keep=false'
+      // 帧数一致
+      record('full.gif', p, '帧数保持一致', inp.frames.length, out.frames.length, inp.frames.length === out.frames.length)
+      // 输出画布 = 2 * 裁剪宽 = 120
+      record('full.gif', p, '输出画布宽度 = 2×clipW(120)', 120, out.gif.lsd.width, out.gif.lsd.width === 120)
+      // 每帧全画幅
+      const allFull = out.frames.every(f => f.dims.width === out.gif.lsd.width && f.dims.height === out.gif.lsd.height)
+      record('full.gif', p, '输出每帧为全画幅', true, allFull, allFull)
+      // 延迟一致（输入 100ms）
+      const delays = out.frames.map(f => f.delay)
+      record('full.gif', p, '帧延迟保持 100ms', [100,100,100], delays, delays.every(d => d === 100))
+      // 像素镜像对称：第一帧，左镜像 → 右侧是左侧的镜像
+      const f0 = out.frames[0]
+      const c = document.createElement('canvas'); c.width = f0.dims.width; c.height = f0.dims.height
+      const ctx = c.getContext('2d')
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(f0.patch), f0.dims.width, f0.dims.height), 0, 0)
+      const d = ctx.getImageData(0, 0, c.width, c.height).data
+      const w = c.width, clipW = w / 2
+      let sym = true
+      for (let y = 20; y < 60; y += 2) {
+        for (let x = 0; x < clipW; x += 2) {
+          const i1 = (y * w + (w - 1 - x)) * 4
+          const i2 = (y * w + x) * 4
+          if (d[i1] !== d[i2] || d[i1 + 1] !== d[i2 + 1] || d[i1 + 2] !== d[i2 + 2]) { sym = false; break }
+        }
+        if (!sym) break
+      }
+      record('full.gif', p, '右半区为左半区镜像（抽样）', '对称', sym ? '对称' : '不对称', sym)
+    }
+    const checks_transparent = async (inp, out) => {
+      const p = 'left 50% keep=false'
+      // 关键回归：局部帧场景下，输出帧应为全画幅（当前 bug 会输出小尺寸帧）
+      record('transparent.gif', p, '帧数保持一致', inp.frames.length, out.frames.length, inp.frames.length === out.frames.length)
+      const allFull = out.frames.every(f => f.dims.width === out.gif.lsd.width && f.dims.height === out.gif.lsd.height)
+      record('transparent.gif', p, '每帧为全画幅（局部帧合成）', true, allFull, allFull)
+      // 画布尺寸 100x100
+      record('transparent.gif', p, '输出画布 100x100', '100x100', `${out.gif.lsd.width}x${out.gif.lsd.height}`, out.gif.lsd.width === 100 && out.gif.lsd.height === 100)
+      // 透明背景保留
+      const f0 = out.frames[0]
+      const c = document.createElement('canvas'); c.width = f0.dims.width; c.height = f0.dims.height
+      const ctx = c.getContext('2d')
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(f0.patch), f0.dims.width, f0.dims.height), 0, 0)
+      const d = ctx.getImageData(0, 0, c.width, c.height).data
+      let transparentCount = 0, total = 0
+      for (let i = 3; i < d.length; i += 4) { total++; if (d[i] === 0) transparentCount++ }
+      const hasTransparent = transparentCount > 0 && transparentCount < total
+      record('transparent.gif', p, '输出保留透明背景（既有透明又有不透明像素）', true, hasTransparent, hasTransparent)
+    }
+    const checks_delay = async (inp, out) => {
+      const p = 'left 50% keep=false'
+      const inDelays = inp.frames.map(f => f.delay)
+      const outDelays = out.frames.map(f => f.delay)
+      record('delay.gif', p, '帧延迟保持 [100,300,50]', inDelays, outDelays, JSON.stringify(inDelays) === JSON.stringify(outDelays))
+    }
+    // ===== 执行 =====
+    try {
+      await runCase('full.gif', 'full.gif', 'left', 50, false, checks_full)
+      await runCase('transparent.gif', 'transparent.gif', 'left', 50, false, checks_transparent)
+      await runCase('delay.gif', 'delay.gif', 'left', 50, false, checks_delay)
+      // 更多方向/比例组合的尺寸断言
+      const dimsCases = [
+        ['full.gif', 'right', 50, false, '120x80'],
+        ['full.gif', 'top', 50, false, '120x80'],
+        ['full.gif', 'bottom', 50, false, '120x80'],
+        ['full.gif', 'left', 30, false, '72x80'],
+        ['full.gif', 'left', 50, true, '120x80'],
+        ['full.gif', 'left', 100, true, '120x80']
+      ]
+      for (const [file, dir, ratio, keep, expect] of dimsCases) {
+        const ab = await fetchBuffer('/test/' + file)
+        const blob = await processGif(ab, dir, ratio, keep, () => {})
+        const out = parseOut(await blob.arrayBuffer())
+        const actual = `${out.gif.lsd.width}x${out.gif.lsd.height}`
+        record('尺寸-' + dir + '-' + ratio + (keep ? '-keep' : ''), `${dir} ${ratio}% keep=${keep}`, '输出画布尺寸', expect, actual, actual === expect)
+      }
+      // 保持原尺寸 + 100%：内容应等比缩放居中（contain），而非裁切
+      {
+        const ab = await fetchBuffer('/test/full.gif')
+        const blob = await processGif(ab, 'left', 100, true, () => {})
+        const out = parseOut(await blob.arrayBuffer())
+        const f0 = out.frames[0]
+        const c = document.createElement('canvas'); c.width = f0.dims.width; c.height = f0.dims.height
+        const ctx = c.getContext('2d')
+        ctx.putImageData(new ImageData(new Uint8ClampedArray(f0.patch), f0.dims.width, f0.dims.height), 0, 0)
+        const d = ctx.getImageData(0, 0, c.width, c.height).data
+        const W = c.width, H = c.height
+        // 顶部边距像素应透明（内容缩小后上下留白）
+        const topAlpha = d[((Math.floor(H * 0.06)) * W + Math.floor(W / 2)) * 4 + 3]
+        // 中心像素应不透明（内容存在）
+        const centerAlpha = d[(Math.floor(H / 2) * W + Math.floor(W / 2)) * 4 + 3]
+        const fitOk = topAlpha === 0 && centerAlpha === 255
+        record('保持原尺寸-100%', 'left 100% keep=true', '内容等比缩放居中（顶部留白、中心有内容）', '留白+内容', `top=${topAlpha} center=${centerAlpha}`, fitOk)
+      }
+    } catch (err) {
+      logEl.textContent += '\n[致命错误] ' + (err && err.stack || err)
+      record('全局', '-', '无异常', '无异常', String(err && err.message || err), false)
+    }
+    // 汇总
+    const sum = document.getElementById('summary')
+    if (failures === 0) {
+      sum.className = 'summary pass'
+      sum.textContent = `✅ 全部通过（${results.length} 项断言）`
+    } else {
+      sum.className = 'summary fail'
+      sum.textContent = `❌ ${failures} 项失败 / 共 ${results.length} 项断言`
+    }
+  </script>
+</body>
+</html>
