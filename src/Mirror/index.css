@@ -8,7 +8,6 @@
   gap: 8px;
   overflow-y: auto;
 }
-
 .mirror-uploader {
   border: 2px dashed #ccc;
   border-radius: 16px;
@@ -18,37 +17,31 @@
   transition: all 0.3s ease;
   background: #fff;
 }
-
 .mirror-uploader:hover,
 .mirror-uploader.dragging {
   border-color: var(--blue);
   background: rgba(88, 164, 246, 0.04);
 }
-
 .mirror-uploader-icon {
   font-size: 52px;
   margin-bottom: 14px;
 }
-
 .mirror-uploader-text {
   font-size: 15px;
   margin-bottom: 8px;
   font-weight: 500;
   color: #333;
 }
-
 .mirror-uploader-hint {
   font-size: 12px;
   color: #999;
 }
-
 .mirror-toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 4px 0;
 }
-
 .mirror-btn-back {
   padding: 5px 14px;
   border-radius: 8px;
@@ -58,11 +51,9 @@
   flex-shrink: 0;
   transition: background 0.2s;
 }
-
 .mirror-btn-back:hover {
   background: #d0d0d0;
 }
-
 .mirror-file-name {
   font-size: 12px;
   color: #666;
@@ -70,7 +61,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .mirror-gif-badge {
   background: linear-gradient(135deg, #e91e63, #f06292);
   color: #fff;
@@ -81,7 +71,6 @@
   letter-spacing: 0.5px;
   flex-shrink: 0;
 }
-
 .mirror-controls {
   background: #fff;
   border-radius: 10px;
@@ -89,15 +78,12 @@
   border: 1px solid #e8e8e8;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
-
 .mirror-control-group {
   margin-bottom: 8px;
 }
-
 .mirror-control-group:last-child {
   margin-bottom: 0;
 }
-
 .mirror-control-label {
   display: flex;
   align-items: center;
@@ -107,19 +93,16 @@
   color: #666;
   font-weight: 500;
 }
-
 .mirror-ratio-value {
   font-weight: 700;
   color: var(--blue);
   font-size: 12px;
 }
-
 .mirror-direction-btns {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
 }
-
 .mirror-dir-btn {
   display: flex;
   flex-direction: column;
@@ -133,36 +116,30 @@
   cursor: pointer;
   transition: all 0.2s ease;
 }
-
 .mirror-dir-btn:hover {
   background: #f0f0f0;
   border-color: #ccc;
 }
-
 .mirror-dir-btn.active {
   border-color: var(--blue);
   background: rgba(88, 164, 246, 0.1);
   color: var(--blue);
   box-shadow: 0 1px 3px rgba(88, 164, 246, 0.12);
 }
-
 .mirror-dir-icon {
   font-size: 12px;
   line-height: 1;
 }
-
 .mirror-dir-label {
   font-size: 9px;
   font-weight: 500;
   line-height: 1;
 }
-
 .mirror-slider-wrap {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-
 .mirror-slider-min,
 .mirror-slider-max {
   font-size: 10px;
@@ -170,7 +147,6 @@
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
-
 .mirror-slider {
   flex: 1;
   -webkit-appearance: none;
@@ -181,11 +157,9 @@
   outline: none;
   transition: background 0.2s;
 }
-
 .mirror-slider:hover {
   background: #d0d0d0;
 }
-
 .mirror-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -198,11 +172,9 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   transition: transform 0.15s;
 }
-
 .mirror-slider::-webkit-slider-thumb:hover {
   transform: scale(1.15);
 }
-
 .mirror-slider::-moz-range-thumb {
   width: 14px;
   height: 14px;
@@ -212,12 +184,10 @@
   border: 2px solid #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
-
 .mirror-control-row {
   display: flex;
   align-items: center;
 }
-
 .mirror-checkbox {
   display: flex;
   align-items: center;
@@ -227,21 +197,18 @@
   user-select: none;
   color: #555;
 }
-
 .mirror-checkbox input[type="checkbox"] {
   width: 14px;
   height: 14px;
   accent-color: var(--blue);
   cursor: pointer;
 }
-
 .mirror-progress {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 4px 0;
 }
-
 .mirror-progress-bar {
   flex: 1;
   height: 5px;
@@ -249,21 +216,18 @@
   border-radius: 3px;
   overflow: hidden;
 }
-
 .mirror-progress-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--blue), #42a5f5);
   border-radius: 3px;
   transition: width 0.2s ease;
 }
-
 .mirror-progress-text {
   font-size: 11px;
   color: #999;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
-
 .mirror-preview {
   display: flex;
   flex-direction: column;
@@ -271,14 +235,12 @@
   flex: 1;
   min-height: 0;
 }
-
 .mirror-preview-row {
   display: flex;
   gap: 8px;
   flex: 1;
   min-height: 0;
 }
-
 .mirror-preview-panel {
   flex: 1;
   display: flex;
@@ -286,7 +248,6 @@
   min-width: 0;
   min-height: 0;
 }
-
 .mirror-preview-title {
   font-size: 11px;
   margin-bottom: 4px;
@@ -295,7 +256,6 @@
   letter-spacing: 0.5px;
   font-weight: 600;
 }
-
 .mirror-preview-img-wrap {
   flex: 1;
   background: #fff;
@@ -309,19 +269,16 @@
   padding: 10px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
-
 .mirror-preview-img {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
   border-radius: 4px;
 }
-
 .mirror-preview-placeholder {
   color: #bbb;
   font-size: 13px;
 }
-
 .mirror-preview-divider {
   display: flex;
   align-items: center;
@@ -329,19 +286,16 @@
   flex-shrink: 0;
   width: 24px;
 }
-
 .mirror-preview-arrow {
   font-size: 18px;
   color: #ccc;
 }
-
 .mirror-preview-actions {
   display: flex;
   justify-content: center;
   gap: 10px;
   padding-top: 4px;
 }
-
 .mirror-download-btn {
   padding: 10px 32px;
   border-radius: 10px;
@@ -353,16 +307,13 @@
   transition: all 0.25s ease;
   box-shadow: 0 2px 8px rgba(88, 164, 246, 0.3);
 }
-
 .mirror-download-btn:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(88, 164, 246, 0.4);
 }
-
 .mirror-download-btn:active {
   transform: translateY(0);
 }
-
 .mirror-copy-btn {
   padding: 10px 24px;
   border-radius: 10px;
@@ -374,124 +325,236 @@
   transition: all 0.25s ease;
   border: 1px solid #ddd;
 }
-
 .mirror-copy-btn:hover {
   background: #e8e8e8;
   transform: translateY(-1px);
 }
-
 .mirror-copy-btn:active {
   transform: translateY(0);
 }
-
 @media (prefers-color-scheme: dark) {
   .mirror-uploader {
     background: #3a3a3a;
     border-color: #555;
   }
-
   .mirror-uploader:hover,
   .mirror-uploader.dragging {
     background: rgba(88, 164, 246, 0.08);
   }
-
   .mirror-uploader-text {
     color: #eee;
   }
-
   .mirror-uploader-hint {
     color: #888;
   }
-
   .mirror-btn-back {
     background: #555;
     color: #eee;
   }
-
   .mirror-btn-back:hover {
     background: #666;
   }
-
   .mirror-file-name {
     color: #aaa;
   }
-
   .mirror-controls {
     background: #3a3a3a;
     border-color: #555;
   }
-
   .mirror-control-label {
     color: #aaa;
   }
-
   .mirror-dir-btn {
     background: #444;
     border-color: #555;
     color: #ccc;
   }
-
   .mirror-dir-btn:hover {
     background: #4a4a4a;
     border-color: #666;
   }
-
   .mirror-dir-btn.active {
     color: var(--blue);
   }
-
   .mirror-slider {
     background: #555;
   }
-
   .mirror-slider:hover {
     background: #666;
   }
-
   .mirror-slider::-webkit-slider-thumb {
     border-color: #3a3a3a;
   }
-
   .mirror-slider::-moz-range-thumb {
     border-color: #3a3a3a;
   }
-
   .mirror-checkbox {
     color: #ccc;
   }
-
   .mirror-progress-bar {
     background: #555;
   }
-
   .mirror-progress-text {
     color: #888;
   }
-
   .mirror-preview-title {
     color: #888;
   }
-
   .mirror-preview-img-wrap {
     background: #3a3a3a;
     border-color: #555;
   }
-
   .mirror-preview-placeholder {
     color: #777;
   }
-
   .mirror-preview-arrow {
     color: #666;
   }
-
   .mirror-copy-btn {
     background: #555;
     color: #eee;
     border-color: #666;
   }
-
   .mirror-copy-btn:hover {
     background: #666;
+  }
+}
+/* ===== 新增 UI 优化样式 ===== */
+.mirror-error {
+  background: #fdecec;
+  border: 1px solid #f0b6b6;
+  color: #c62828;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.mirror-processing-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--blue);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.mirror-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(88, 164, 246, 0.25);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  display: inline-block;
+  animation: mirror-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+.mirror-spinner-lg {
+  width: 20px;
+  height: 20px;
+}
+@keyframes mirror-spin {
+  to { transform: rotate(360deg); }
+}
+.mirror-presets {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+.mirror-preset-btn {
+  padding: 3px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  border: 1px solid #e0e0e0;
+  background: #fafafa;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.mirror-preset-btn:hover:not(:disabled) {
+  background: #f0f0f0;
+  border-color: #ccc;
+}
+.mirror-preset-btn.active {
+  background: rgba(88, 164, 246, 0.12);
+  border-color: var(--blue);
+  color: var(--blue);
+  font-weight: 600;
+}
+.mirror-info {
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  background: rgba(0, 0, 0, 0.025);
+  border-radius: 8px;
+  padding: 5px 10px;
+}
+.mirror-preview-img-wrap {
+  position: relative;
+}
+.mirror-preview-mask {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: 10px;
+  z-index: 2;
+}
+.mirror-preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.mirror-preview-img {
+  max-width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+.mirror-dir-btn:disabled,
+.mirror-slider:disabled,
+.mirror-checkbox input:disabled,
+.mirror-preset-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.mirror-btn-back:disabled,
+.mirror-download-btn:disabled,
+.mirror-copy-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
+@media (prefers-color-scheme: dark) {
+  .mirror-error {
+    background: rgba(198, 40, 40, 0.2);
+    border-color: rgba(240, 182, 182, 0.3);
+    color: #ff8a80;
+  }
+  .mirror-processing-tag {
+    color: var(--blue);
+  }
+  .mirror-preset-btn {
+    background: #444;
+    border-color: #555;
+    color: #ccc;
+  }
+  .mirror-preset-btn:hover:not(:disabled) {
+    background: #4a4a4a;
+  }
+  .mirror-preset-btn.active {
+    color: var(--blue);
+  }
+  .mirror-info {
+    background: rgba(255, 255, 255, 0.06);
+    color: #aaa;
+  }
+  .mirror-preview-mask {
+    background: rgba(0, 0, 0, 0.55);
   }
 }
