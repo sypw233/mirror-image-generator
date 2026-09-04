@@ -3,12 +3,15 @@ import { parseGIF, decompressFrames } from 'gifuct-js'
 import GIF from 'gif.js'
 import { mirrorFrame } from './mirror'
 import workerUrl from './gif.worker.js?url'
+
 /** 透明键兜底色（品红，仅当图像恰好包含该色时可能误判，见 pickTransparentKey） */
 const FALLBACK_KEY = { r: 255, g: 0, b: 255, num: 0xff00ff }
+
 /** 让出主线程，使 UI 能绘制进度、保持响应 */
 function yieldToUI () {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
+
 export function isGifBuffer (buffer) {
   const bytes = new Uint8Array(buffer)
   return bytes[0] === 0x47 &&
@@ -16,6 +19,7 @@ export function isGifBuffer (buffer) {
     bytes[2] === 0x46 &&
     bytes[3] === 0x38
 }
+
 /**
  * 把 gifuct 解析出的局部帧按 GIF 渲染规则合成到全画幅。
  * gifuct-js 2.x 不会自动合成，部分帧（只存储变化区域）会丢失 top/left 与 disposal，
@@ -29,6 +33,7 @@ function composeFrames (gif, frames) {
   let prevRect = null
   let prevDisposal = 0
   let snapshotBeforePrev = null
+
   for (let i = 0; i < frames.length; i++) {
     const f = frames[i]
     // 先应用上一帧的 disposal
@@ -56,32 +61,38 @@ function composeFrames (gif, frames) {
   }
   return composed
 }
+
+/** 以 Uint32 视角读写 ImageData，单次读写整个像素（RGBA），比逐字节快数倍 */
+function bufferView32 (buffer) {
+  return new Uint32Array(buffer.data.buffer, buffer.data.byteOffset, buffer.data.length / 4)
+}
 function clearRect (buffer, rect) {
   const { left, top, width, height } = rect
+  const buf32 = bufferView32(buffer)
+  const canvasW = buffer.width
   for (let y = 0; y < height; y++) {
-    const row = (top + y) * buffer.width
-    for (let x = 0; x < width; x++) {
-      buffer.data[((row + left + x) * 4) + 3] = 0
-    }
+    const base = (top + y) * canvasW + left
+    buf32.fill(0, base, base + width)
   }
 }
+
 function drawPatch (buffer, frame) {
   const { left, top, width, height } = frame.dims
   const patch = frame.patch
+  const buf32 = bufferView32(buffer)
+  const canvasW = buffer.width
   for (let y = 0; y < height; y++) {
     const patchRow = y * width
-    const bufRow = (top + y) * buffer.width + left
+    const base = (top + y) * canvasW + left
     for (let x = 0; x < width; x++) {
       const pi = (patchRow + x) * 4
       if (patch[pi + 3] === 0) continue // 透明像素跳过
-      const di = (bufRow + x) * 4
-      buffer.data[di] = patch[pi]
-      buffer.data[di + 1] = patch[pi + 1]
-      buffer.data[di + 2] = patch[pi + 2]
-      buffer.data[di + 3] = 255
+      // 小端打包：alpha<<24 | b<<16 | g<<8 | r（alpha 固定 255，同原逻辑）
+      buf32[base + x] = (0xff000000) | (patch[pi + 2] << 16) | (patch[pi + 1] << 8) | patch[pi]
     }
   }
 }
+
 function imageDataToCanvas (imageData) {
   const c = document.createElement('canvas')
   c.width = imageData.width
@@ -89,6 +100,7 @@ function imageDataToCanvas (imageData) {
   c.getContext('2d').putImageData(imageData, 0, 0)
   return c
 }
+
 /**
  * 扫描所有帧的有效像素颜色。
  * 返回 { map: Map<num,[r,g,b]>, overflow }，颜色数超过 limit 时标记 overflow（用于决定是否用全局调色板）。
@@ -112,6 +124,7 @@ function scanColors (canvases, limit) {
   }
   return { map, overflow: false }
 }
+
 /** 从常用候选色中选一个未出现在图像里的颜色作为透明键，避免把图像真实颜色误判为透明 */
 function pickTransparentKey (colorMap) {
   const candidates = [
@@ -125,6 +138,7 @@ function pickTransparentKey (colorMap) {
   }
   return FALLBACK_KEY
 }
+
 /** 把画布中的透明像素替换为透明键色，供 gif.js 编码时映射为透明索引 */
 function replaceTransparent (canvas, key) {
   const ctx = canvas.getContext('2d')
@@ -142,6 +156,7 @@ function replaceTransparent (canvas, key) {
   }
   if (changed) ctx.putImageData(imageData, 0, 0)
 }
+
 /**
  * GIF 镜像处理：
  * 解码 → 全画幅合成 → 逐帧镜像 → 透明处理 → gif.js 编码
@@ -159,9 +174,11 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
   if (total === 0) {
     throw new Error('GIF 不包含有效帧')
   }
+
   // 1. 全画幅合成（处理局部帧与 disposal）
   const composed = composeFrames(gif, frames)
   if (onProgress) onProgress(10)
+
   // 2. 逐帧镜像
   const canvases = []
   for (let i = 0; i < total; i++) {
@@ -173,15 +190,18 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     if (onProgress) onProgress(10 + Math.round(((i + 1) / total) * 45))
     if (i % 3 === 2) await yieldToUI()
   }
+
   // 3. 颜色扫描 + 透明键
   const { map: colorMap, overflow } = scanColors(canvases, 255)
   const key = pickTransparentKey(colorMap)
   const useGlobalPalette = !overflow
+
   // 4. 透明像素替换为透明键色
   for (let i = 0; i < canvases.length; i++) {
     replaceTransparent(canvases[i].canvas, key)
     if (i % 3 === 2) await yieldToUI()
   }
+
   // 5. 编码
   const first = canvases[0].canvas
   const encoderOptions = {
@@ -201,6 +221,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     encoderOptions.globalPalette = palette.slice(0, 256 * 3)
   }
   const encoder = new GIF(encoderOptions)
+
   return new Promise((resolve, reject) => {
     encoder.on('finished', (blob) => {
       if (onProgress) onProgress(100)
@@ -215,6 +236,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
     encoder.render()
   })
 }
+
 export function getGifMetadata (arrayBuffer) {
   const gif = parseGIF(arrayBuffer)
   const frames = decompressFrames(gif, true)

@@ -7,6 +7,7 @@ import { isGifFile, isImageFile, saveFile, copyImageToClipboard, readFileAsArray
 import { mirrorImage } from './utils/mirror'
 import { processGif, isGifBuffer, getGifMetadata } from './utils/gifProcessor'
 import './index.css'
+
 export default function Mirror ({ enterAction }) {
   const [arrayBuffer, setArrayBuffer] = useState(null)
   const [fileName, setFileName] = useState('')
@@ -23,6 +24,12 @@ export default function Mirror ({ enterAction }) {
   const [error, setError] = useState('')
   const [resultInfo, setResultInfo] = useState(null)
   const runIdRef = useRef(0)
+  const processingRef = useRef(false)
+  // 同步最新 processing 到 ref，供全局拖放事件读取（避免闭包捕获旧值）
+  useEffect(() => {
+    processingRef.current = processing
+  }, [processing])
+
   // 原图 URL：仅在输入变化时重建，避免每次渲染都重建导致图片闪烁
   const originalUrl = useMemo(() => {
     if (!arrayBuffer) return null
@@ -30,12 +37,14 @@ export default function Mirror ({ enterAction }) {
     const blob = new Blob([arrayBuffer], { type: mime })
     return URL.createObjectURL(blob)
   }, [arrayBuffer, isGif])
+
   // 原图 URL 变化时释放旧 URL，避免内存泄漏
   useEffect(() => {
     return () => {
       if (originalUrl) URL.revokeObjectURL(originalUrl)
     }
   }, [originalUrl])
+
   const processImage = useCallback(async () => {
     if (!arrayBuffer) return
     const runId = ++runIdRef.current
@@ -43,6 +52,7 @@ export default function Mirror ({ enterAction }) {
     setProcessing(true)
     setProgress(0)
     setResultInfo(null)
+    const t0 = performance.now()
     try {
       let blob
       if (isGif) {
@@ -68,6 +78,7 @@ export default function Mirror ({ enterAction }) {
       if (runId !== runIdRef.current) return // 丢弃过期结果
       setResultBlob(blob)
       const info = await readImageInfo(blob, isGif, gifMeta)
+      info.elapsedMs = Math.round(performance.now() - t0)
       if (runId !== runIdRef.current) return
       setResultInfo(info)
     } catch (err) {
@@ -82,6 +93,7 @@ export default function Mirror ({ enterAction }) {
       }
     }
   }, [arrayBuffer, isGif, controls, gifMeta])
+
   // 防抖：滑块连续拖动时不频繁触发重处理
   useEffect(() => {
     if (!arrayBuffer) return
@@ -90,6 +102,7 @@ export default function Mirror ({ enterAction }) {
     }, 150)
     return () => clearTimeout(timer)
   }, [processImage, arrayBuffer])
+
   useEffect(() => {
     if (enterAction?.type === 'img' && enterAction.payload) {
       const payload = enterAction.payload
@@ -103,6 +116,7 @@ export default function Mirror ({ enterAction }) {
       }
     }
   }, [enterAction])
+
   useEffect(() => {
     const handleDragOver = (e) => {
       e.preventDefault()
@@ -111,6 +125,10 @@ export default function Mirror ({ enterAction }) {
     const handleDrop = async (e) => {
       e.preventDefault()
       e.stopPropagation()
+      if (processingRef.current) {
+        setError('正在处理中，请稍候再拖入新图片')
+        return
+      }
       const files = e.dataTransfer?.files
       if (!files || files.length === 0) return
       const file = files[0]
@@ -128,6 +146,7 @@ export default function Mirror ({ enterAction }) {
       document.removeEventListener('drop', handleDrop)
     }
   }, [])
+
   const handleImageLoad = (buffer, name) => {
     runIdRef.current++ // 使进行中的旧处理失效
     setArrayBuffer(buffer)
@@ -140,9 +159,11 @@ export default function Mirror ({ enterAction }) {
     setError('')
     setResultInfo(null)
   }
+
   const handleControlsChange = (newControls) => {
     setControls(newControls)
   }
+
   const handleDownload = async () => {
     if (!resultBlob) return
     const ext = isGif ? 'gif' : 'png'
@@ -150,10 +171,14 @@ export default function Mirror ({ enterAction }) {
     const downloadName = `${baseName}_mirror.${ext}`
     await saveFile(resultBlob, downloadName)
   }
+
   const handleCopy = async () => {
     if (!resultBlob) return false
-    return await copyImageToClipboard(resultBlob)
+    const ok = await copyImageToClipboard(resultBlob)
+    if (!ok) setError('复制图片失败，请重试')
+    return ok
   }
+
   const handleReset = () => {
     runIdRef.current++
     setArrayBuffer(null)
@@ -165,6 +190,7 @@ export default function Mirror ({ enterAction }) {
     setError('')
     setResultInfo(null)
   }
+
   return (
     <div className='mirror-app'>
       {!arrayBuffer && (
@@ -212,6 +238,7 @@ export default function Mirror ({ enterAction }) {
     </div>
   )
 }
+
 function loadImage (buffer) {
   return new Promise((resolve, reject) => {
     const blob = new Blob([buffer])
@@ -228,6 +255,7 @@ function loadImage (buffer) {
     img.src = url
   })
 }
+
 function canvasToBlob (canvas) {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
@@ -236,6 +264,7 @@ function canvasToBlob (canvas) {
     }, 'image/png')
   })
 }
+
 function safeGifMeta (buffer) {
   try {
     return getGifMetadata(buffer)
@@ -244,6 +273,7 @@ function safeGifMeta (buffer) {
     return null
   }
 }
+
 async function readImageInfo (blob, gif, gifMeta) {
   const info = { width: 0, height: 0, size: blob.size }
   try {

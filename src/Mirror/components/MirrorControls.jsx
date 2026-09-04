@@ -1,3 +1,4 @@
+/* global localStorage */
 import { useState } from 'react'
 const DIRECTIONS = [
   { key: 'left', label: '左对称', icon: '◀' },
@@ -6,11 +7,36 @@ const DIRECTIONS = [
   { key: 'bottom', label: '下对称', icon: '▼' }
 ]
 const RATIO_PRESETS = [25, 50, 75, 100]
+const STORAGE_KEY = 'mirror.settings'
+/** 从 localStorage 恢复上次设置；解析失败或字段非法时回退默认值 */
+function loadSettings () {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const s = JSON.parse(raw)
+    return {
+      direction: DIRECTIONS.some((d) => d.key === s.direction) ? s.direction : 'left',
+      ratio: Math.min(100, Math.max(1, Number(s.ratio) || 50)),
+      keepOriginalSize: !!s.keepOriginalSize
+    }
+  } catch (err) {
+    return null
+  }
+}
+function saveSettings (direction, ratio, keepOriginalSize) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ direction, ratio, keepOriginalSize }))
+  } catch (err) {
+    // 隐私模式等环境下 localStorage 不可用，忽略即可
+  }
+}
 export default function MirrorControls ({ onChange, disabled = false }) {
-  const [direction, setDirection] = useState('left')
-  const [ratio, setRatio] = useState(50)
-  const [keepOriginalSize, setKeepOriginalSize] = useState(false)
+  const saved = loadSettings()
+  const [direction, setDirection] = useState(saved?.direction || 'left')
+  const [ratio, setRatio] = useState(saved?.ratio || 50)
+  const [keepOriginalSize, setKeepOriginalSize] = useState(saved?.keepOriginalSize || false)
   const emitChange = (dir, r, keep) => {
+    saveSettings(dir, r, keep)
     onChange({ direction: dir, ratio: r, keepOriginalSize: keep })
   }
   const handleDirection = (dir) => {

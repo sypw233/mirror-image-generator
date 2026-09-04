@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
+
 function formatSize (bytes) {
   if (!bytes && bytes !== 0) return ''
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
 }
+
 function formatDuration (ms) {
   if (!ms && ms !== 0) return ''
   return `${(ms / 1000).toFixed(1)}s`
 }
+function formatElapsed (ms) {
+  if (!ms && ms !== 0) return ''
+  return `${ms}ms`
+}
+
 export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, processing, onDownload, onCopy }) {
   // 仅在结果变化时创建 URL，避免每次渲染重建导致图片闪烁
   const resultUrl = useMemo(() => {
@@ -36,7 +43,8 @@ export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, pr
   const infoText = info
     ? `${info.width}×${info.height} · ${formatSize(info.size)}` +
       (isGif && info.frameCount ? ` · ${info.frameCount} 帧` : '') +
-      (isGif && info.duration ? ` · ${formatDuration(info.duration)}` : '')
+      (isGif && info.duration ? ` · ${formatDuration(info.duration)}` : '') +
+      (info.elapsedMs ? ` · 耗时 ${formatElapsed(info.elapsedMs)}` : '')
     : ''
   return (
     <div className='mirror-preview'>
