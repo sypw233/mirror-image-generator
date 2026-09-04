@@ -1,13 +1,11 @@
+/* global FileReader, ClipboardItem, Image */
 const isUtools = typeof window !== 'undefined' && window.utools
-
 export function isGifFile (fileName) {
   return /\.gif$/i.test(fileName)
 }
-
 export function isImageFile (fileName) {
   return /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(fileName)
 }
-
 export function readFileAsArrayBuffer (file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -16,7 +14,6 @@ export function readFileAsArrayBuffer (file) {
     reader.readAsArrayBuffer(file)
   })
 }
-
 export function readFileFromPath (filePath) {
   if (!isUtools) {
     throw new Error('文件路径读取仅支持 uTools 环境')
@@ -27,7 +24,6 @@ export function readFileFromPath (filePath) {
   }
   return fs(filePath)
 }
-
 export function openFilePicker (accept = 'image/*') {
   return new Promise((resolve) => {
     if (isUtools) {
@@ -63,7 +59,6 @@ export function openFilePicker (accept = 'image/*') {
     }
   })
 }
-
 async function blobToBase64 (blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -72,12 +67,10 @@ async function blobToBase64 (blob) {
     reader.readAsDataURL(blob)
   })
 }
-
 export async function saveFile (blob, fileName) {
   if (!(blob instanceof Blob)) {
     blob = new Blob([blob])
   }
-
   if (isUtools && window.services?.writeImageFile) {
     try {
       const base64Url = await blobToBase64(blob)
@@ -94,7 +87,6 @@ export async function saveFile (blob, fileName) {
     return downloadBlob(blob, fileName)
   }
 }
-
 function downloadBlob (blob, fileName) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -106,12 +98,10 @@ function downloadBlob (blob, fileName) {
   setTimeout(() => URL.revokeObjectURL(url), 100)
   return null
 }
-
 export async function copyImageToClipboard (blob) {
   if (!(blob instanceof Blob)) {
     blob = new Blob([blob])
   }
-
   try {
     if (navigator.clipboard && typeof ClipboardItem !== 'undefined') {
       const mimeType = blob.type || 'image/png'
@@ -127,7 +117,6 @@ export async function copyImageToClipboard (blob) {
     return await fallbackCopyImage(blob)
   }
 }
-
 async function fallbackCopyImage (blob) {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(blob)
