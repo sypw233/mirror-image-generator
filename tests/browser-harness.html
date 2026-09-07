@@ -75,6 +75,22 @@
       return { gif, frames }
     }
 
+    // 扫描输出 GIF 的 NETSCAPE 循环计数（gif.js 写入的 loop 值；-1 表示无循环块）
+    function scanLoopCount (buffer) {
+      const bytes = new Uint8Array(buffer)
+      const sig = [0x21, 0xff, 0x0b, 0x4e, 0x45, 0x54, 0x53, 0x43, 0x41, 0x50, 0x45, 0x32, 0x2e, 0x30, 0x03, 0x01]
+      for (let i = 0; i + sig.length + 2 <= bytes.length; i++) {
+        let match = true
+        for (let j = 0; j < sig.length; j++) {
+          if (bytes[i + j] !== sig[j]) { match = false; break }
+        }
+        if (match) {
+          return bytes[i + sig.length] | (bytes[i + sig.length + 1] << 8)
+        }
+      }
+      return -1
+    }
+
     const logEl = document.getElementById('log')
 
     async function runCase (name, file, direction, ratio, keep, checks, opts) {
@@ -95,18 +111,6 @@
       })
       const params = `${direction} ${ratio}% keep=${keep}`
       await checks(inp, out, params)
-    }
-
-    // 像素对称校验：加载一张图到 canvas，检查镜像对称性
-    function frameToCanvas (frame, canvasW, canvasH) {
-      // 用帧 patch 构建完整画布（测试用简化：直接把 patch 放 0,0）
-      const c = document.createElement('canvas')
-      c.width = canvasW
-      c.height = canvasH
-      const ctx = c.getContext('2d')
-      const img = new ImageData(new Uint8ClampedArray(frame.patch), frame.dims.width, frame.dims.height)
-      ctx.putImageData(img, frame.dims.left, frame.dims.top)
-      return c
     }
 
     const checks_full = async (inp, out) => {
@@ -228,6 +232,70 @@
           isAbort = err?.name === 'AbortError'
         }
         record('取消-已中止信号', 'signal 已 abort', '立即抛 AbortError', true, threw && isAbort, threw && isAbort)
+      }
+      // 速度倍速：0.5x 帧延迟 ×2，2x 帧延迟 ×0.5
+      {
+        const ab = await fetchBuffer('/fixtures/delay.gif.b64')
+        const blob = await processGif(ab, 'left', 50, false, () => {}, { speed: 0.5 })
+        const out = parseOut(await blob.arrayBuffer())
+        const delays = out.frames.map(f => f.delay)
+        const ok = JSON.stringify(delays) === JSON.stringify([200, 600, 100])
+        record('速度-0.5x', 'delay.gif speed=0.5', '帧延迟 ×2（100/300/50 → 200/600/100）', [200,600,100], delays, ok)
+      }
+      {
+        const ab = await fetchBuffer('/fixtures/delay.gif.b64')
+        const blob = await processGif(ab, 'left', 50, false, () => {}, { speed: 2 })
+        const out = parseOut(await blob.arrayBuffer())
+        const delays = out.frames.map(f => f.delay)
+        // 25ms 在 GIF 厘秒精度（10ms 粒度）下被舍入为 30ms，故预期 [50,150,30]
+        const ok = JSON.stringify(delays) === JSON.stringify([50, 150, 30])
+        record('速度-2x', 'delay.gif speed=2', '帧延迟 ×0.5（100/300/50 → 50/150/25，25ms 舍入为 30ms）', [50,150,30], delays, ok)
+      }
+      // 循环次数：repeat=3 → NETSCAPE loop=3；默认 repeat=0 → loop=0（无限）
+      {
+        const ab = await fetchBuffer('/fixtures/full.gif.b64')
+        const blob = await processGif(ab, 'left', 50, false, () => {}, { repeat: 3 })
+        const loop = scanLoopCount(await blob.arrayBuffer())
+        record('循环-3次', 'repeat=3', '输出 NETSCAPE 循环计数 = 3', 3, loop, loop === 3)
+      }
+      {
+        const ab = await fetchBuffer('/fixtures/full.gif.b64')
+        const blob = await processGif(ab, 'left', 50, false, () => {})
+        const loop = scanLoopCount(await blob.arrayBuffer())
+        record('循环-默认无限', 'repeat 默认', '输出 NETSCAPE 循环计数 = 0（无限）', 0, loop, loop === 0)
+      }
+      // 背景色：transparent.gif + bg=红 → 输出帧无透明像素，原透明背景区域变为红色
+      {
+        const ab = await fetchBuffer('/fixtures/transparent.gif.b64')
+        const blob = await processGif(ab, 'left', 50, false, () => {}, { backgroundColor: '#ff0000' })
+        const out = parseOut(await blob.arrayBuffer())
+        const f0 = out.frames[0]
+        const c = document.createElement('canvas'); c.width = f0.dims.width; c.height = f0.dims.height
+        const ctx = c.getContext('2d')
+        ctx.putImageData(new ImageData(new Uint8ClampedArray(f0.patch), f0.dims.width, f0.dims.height), 0, 0)
+        const d = ctx.getImageData(0, 0, c.width, c.height).data
+        let alpha0 = 0
+        for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
+        // 角落 (2,2) 原是透明背景 → 应为红色（容差：r 高、g/b 低）
+        const corner = ((2 * c.width + 2) * 4)
+        const cornerRed = d[corner] > 180 && d[corner + 1] < 90 && d[corner + 2] < 90 && d[corner + 3] === 255
+        record('背景-GIF-红', 'transparent.gif bg=#ff0000', '输出无透明像素且原透明区为红色', '无 alpha0 + 角=红', `alpha0=${alpha0} cornerRed=${cornerRed}`, alpha0 === 0 && cornerRed)
+      }
+      // 背景色：transparent.gif 默认（无 bg）→ 保留透明（回归）
+      {
+        const ab = await fetchBuffer('/fixtures/transparent.gif.b64')
+        const blob = await processGif(ab, 'left', 50, false, () => {})
+        const out = parseOut(await blob.arrayBuffer())
+        const f0 = out.frames[0]
+        const c = document.createElement('canvas'); c.width = f0.dims.width; c.height = f0.dims.height
+        const ctx = c.getContext('2d')
+        ctx.putImageData(new ImageData(new Uint8ClampedArray(f0.patch), f0.dims.width, f0.dims.height), 0, 0)
+        const d = ctx.getImageData(0, 0, c.width, c.height).data
+        let alpha0 = 0
+        for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
+        const corner = ((2 * c.width + 2) * 4)
+        const cornerAlpha0 = d[corner + 3] === 0
+        record('背景-GIF-默认透明', 'transparent.gif 无 bg', '默认保留透明背景', '有透明+角透明', `alpha0=${alpha0} cornerAlpha0=${cornerAlpha0}`, alpha0 > 0 && cornerAlpha0)
       }
     } catch (err) {
       logEl.textContent += '\n[致命错误] ' + (err && err.stack || err)
