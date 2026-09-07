@@ -267,6 +267,70 @@
       const ok = out.width === 80 && out.height === 60
       record('maxEdge-不缩放', 'left 50% maxEdge=4096', '长边未超上限时不缩放', '80x60', `${out.width}x${out.height}`, ok)
     }
+    // ===== 背景色（backgroundColor 第 6 参） =====
+    {
+      // bg 白 + br 50%：空白象限被填白（不透明且为白色），源内容保留
+      const out = mirrorImage(SRC, 'br', 50, false, 0, '#ffffff')
+      const d = pixels(out)
+      const stillBlank = checkBlankQuadrant(out, 0, 30, 30, 30) && checkBlankQuadrant(out, 30, 0, 30, 30)
+      let white = true
+      for (let y = 0; y < 30; y += 4) {
+        for (let x = 30; x < 60; x += 4) {
+          const px = colorAt(d, out.width, x, y)
+          if (px[3] !== 255 || px[0] !== 255 || px[1] !== 255 || px[2] !== 255) { white = false; break }
+        }
+        if (!white) break
+      }
+      const redTL = same(colorAt(d, out.width, 8, 8), RED)
+      record('背景-br50-白', 'br 50% bg=#ffffff', '空白象限填充白色（不透明）且左上红块保留', '空白=白+内容保留', `blank=${stillBlank} white=${white} red=${redTL}`, !stillBlank && white && redTL)
+    }
+    {
+      // bg 红 + tl 50%：空白象限填红，右下黄块保留
+      const out = mirrorImage(SRC, 'tl', 50, false, 0, '#ff0000')
+      const d = pixels(out)
+      const RED_BG = [255, 0, 0, 255]
+      let allRed = true
+      const quads = [[30, 0, 30, 30], [0, 30, 30, 30]]
+      for (const [qx, qy, qw, qh] of quads) {
+        for (let y = qy; y < qy + qh; y += 4) {
+          for (let x = qx; x < qx + qw; x += 4) {
+            if (!same(colorAt(d, out.width, x, y), RED_BG)) { allRed = false; break }
+          }
+          if (!allRed) break
+        }
+        if (!allRed) break
+      }
+      const yellowBR = same(colorAt(d, out.width, out.width - 8, out.height - 8), YELLOW)
+      record('背景-tl50-红', 'tl 50% bg=#ff0000', '空白象限填充红色且右下黄块保留', '空白=红+内容保留', `red=${allRed} yellow=${yellowBR}`, allRed && yellowBR)
+    }
+    {
+      // bg 黑 + left 50%：输出无任何透明像素
+      const out = mirrorImage(SRC, 'left', 50, false, 0, '#000000')
+      const d = pixels(out)
+      let anyTransparent = false
+      for (let i = 3; i < d.length; i += 4) {
+        if (d[i] === 0) { anyTransparent = true; break }
+      }
+      record('背景-left50-黑', 'left 50% bg=#000000', '输出无透明像素（全不透明）', '无 alpha=0', `alpha0=${anyTransparent}`, !anyTransparent)
+    }
+    {
+      // bg 白 + left 100% keep=true：留白填白，中心内容保留
+      const out = mirrorImage(SRC, 'left', 100, true, 0, '#ffffff')
+      const d = pixels(out)
+      const W = out.width, H = out.height
+      const topPx = colorAt(d, W, Math.floor(W / 2), Math.floor(H * 0.06))
+      const centerPx = colorAt(d, W, Math.floor(W / 2), Math.floor(H / 2))
+      const topWhite = topPx[3] === 255 && topPx[0] === 255 && topPx[1] === 255 && topPx[2] === 255
+      const centerOk = centerPx[3] === 255
+      record('背景-keep-left100-白', 'left 100% keep=true bg=#ffffff', '缩放留白填充白色、中心有内容', '留白=白+中心不透明', `top=${topPx[3]} center=${centerPx[3]}`, topWhite && centerOk)
+    }
+    {
+      // 默认（bg=null）：keep-left100 留白保持透明（回归检查）
+      const out = mirrorImage(SRC, 'left', 100, true)
+      const d = pixels(out)
+      const topAlpha = colorAt(d, out.width, Math.floor(out.width / 2), Math.floor(out.height * 0.06))[3]
+      record('背景-默认透明', 'left 100% keep=true bg=null', '默认背景透明（留白 alpha=0）', 0, topAlpha, topAlpha === 0)
+    }
     // ===== 方向区分正确性：left 与 right 内容不应相同 =====
     {
       const left = mirrorImage(SRC, 'left', 50, false)
