@@ -25,7 +25,7 @@ function computeContainBox (imgW, imgH, cw, ch) {
   return { left: (cw - w) / 2, top: (ch - h) / 2, width: w, height: h }
 }
 
-export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, processing, onDownload, onCopy, direction }) {
+export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, processing, onDownload, onCopy, direction, history = null }) {
   // 仅在结果变化时创建 URL，避免每次渲染重建导致图片闪烁
   const resultUrl = useMemo(() => {
     if (!resultBlob) return null
@@ -36,6 +36,18 @@ export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, pr
       if (resultUrl) URL.revokeObjectURL(resultUrl)
     }
   }, [resultUrl])
+  // 历史缩略图 URL：批量创建、卸载时统一回收
+  const historyItems = useMemo(() => {
+    if (!history || !history.items || history.items.length === 0) return []
+    return history.items.map((item) => ({
+      ...item,
+      url: URL.createObjectURL(item.blob)
+    }))
+  }, [history])
+  useEffect(() => {
+    const urls = historyItems.map((i) => i.url)
+    return () => urls.forEach((u) => URL.revokeObjectURL(u))
+  }, [historyItems])
   // 结果图内容矩形（相对预览容器），用于绘制镜像轴
   const [axisBox, setAxisBox] = useState(null)
   const handleResultLoad = (e) => {
@@ -120,6 +132,28 @@ export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, pr
         </div>
       </div>
       {infoText && <div className='mirror-info'>{infoText}</div>}
+      {historyItems.length > 0 && (
+        <div className='mirror-history'>
+          <div className='mirror-history-head'>
+            <span className='mirror-history-title'>历史记录</span>
+            <button className='mirror-history-clear' onClick={history.onClear}>清空</button>
+          </div>
+          <div className='mirror-history-list'>
+            {historyItems.map((item) => (
+              <button
+                key={item.id}
+                className={`mirror-history-item ${resultBlob === item.blob ? 'active' : ''}`}
+                onClick={() => history.onRestore(item)}
+                title={`${item.fileName} · ${item.direction}`}
+                disabled={processing}
+              >
+                <img src={item.url} alt='历史' className='mirror-history-thumb' />
+                <span className='mirror-history-meta'>{item.direction}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {resultBlob && (
         <div className='mirror-preview-actions'>
           <button className='mirror-download-btn' onClick={onDownload} disabled={processing}>
