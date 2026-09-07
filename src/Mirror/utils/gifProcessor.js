@@ -165,23 +165,55 @@ function replaceTransparent (canvas, key) {
   if (changed) ctx.putImageData(imageData, 0, 0)
 }
 
+/** 把画布中的透明像素填充为背景色（"背景色"选项：输出不透明） */
+function fillTransparentWithColor (canvas, color) {
+  const ctx = canvas.getContext('2d')
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const data = imageData.data
+  let changed = false
+  const r = parseInt(color.slice(1, 3), 16)
+  const g = parseInt(color.slice(3, 5), 16)
+  const b = parseInt(color.slice(5, 7), 16)
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3] === 0) {
+      data[i] = r
+      data[i + 1] = g
+      data[i + 2] = b
+      data[i + 3] = 255
+      changed = true
+    }
+  }
+  if (changed) ctx.putImageData(imageData, 0, 0)
+}
+
+/** 工作线程数：不超过 CPU 核数，最多 4（gif.js 按帧分片，多 worker 提速明显） */
+function pickWorkerCount () {
+  const hw = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) || 4
+  return Math.max(1, Math.min(4, hw))
+}
+
 /**
  * GIF 镜像处理：
- * 解码 → 全画幅合成 → 逐帧镜像 → 透明处理 → gif.js 编码
+ * 解码 → 全画幅合成 → 逐帧镜像 → 透明/背景处理 → gif.js 编码
  * @param {ArrayBuffer} arrayBuffer
  * @param {string} direction left|right|top|bottom|tl|br
  * @param {number} ratio 镜像比例 1-100
  * @param {boolean} keepOriginalSize
  * @param {(p:number)=>void} onProgress 0-100
- * @param {{workerScript?:string, workers?:number, signal?:AbortSignal, quality?:number, colors?:number, maxEdge?:number}} [options]
+ * @param {{workerScript?:string, workers?:number, signal?:AbortSignal, quality?:number, colors?:number, maxEdge?:number, backgroundColor?:string, speed?:number, repeat?:number}} [options]
  *   quality: gif.js 采样质量 1-30（越小越精细），默认 10
  *   colors: 全局调色板颜色上限，默认 256
  *   maxEdge: 导出长边上限（像素），超出时等比缩小，默认不限
+ *   backgroundColor: #rrggbb，非空时透明像素填充该色（输出不透明），默认 null=保留透明
+ *   speed: 帧速率倍速（0.5=变慢一倍 / 1=原速 / 2=快一倍），默认 1
+ *   repeat: 循环次数（0=无限 / N=循环 N 次），默认 0
  */
 export async function processGif (arrayBuffer, direction, ratio, keepOriginalSize, onProgress, options = {}) {
   const signal = options.signal
   const quality = Math.min(30, Math.max(1, options.quality ?? 10))
   const colorLimit = Math.min(256, Math.max(16, options.colors ?? 256))
+  const backgroundColor = options.backgroundColor || null
+  const speed = Math.max(0.25, Math.min(4, Number(options.speed) || 1))
   const gif = parseGIF(arrayBuffer)
   const frames = decompressFrames(gif, true)
   const total = frames.length
@@ -199,44 +231,57 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
   const composed = composeFrames(gif, frames)
   if (onProgress) onProgress(10)
 
-  // 2. 逐帧镜像
+  // 2. 逐帧镜像（背景色时由镜像层铺底 + 帧内透明像素填充）
   const canvases = []
   for (let i = 0; i < total; i++) {
     throwIfAborted(signal)
     const fullCanvas = imageDataToCanvas(composed[i])
-    const mirrored = mirrorFrame(fullCanvas, direction, ratio, keepOriginalSize, options.maxEdge)
-    // gifuct 已将 gce.delay(厘秒) 转为毫秒，最小 100ms
-    const delay = Math.max(10, frames[i].delay || 100)
+    const mirrored = mirrorFrame(fullCanvas, direction, ratio, keepOriginalSize, options.maxEdge, backgroundColor)
+    // gifuct 已将 gce.delay(厘秒) 转为毫秒；speed 为播放倍速（2x 更快 → 延迟减半），clamp ≥10ms
+    const delay = Math.max(10, Math.round((frames[i].delay || 100) / speed))
     canvases.push({ canvas: mirrored, delay })
     if (onProgress) onProgress(10 + Math.round(((i + 1) / total) * 45))
     if (i % 3 === 2) await yieldToUI()
   }
 
-  // 3. 颜色扫描 + 透明键
+  // 3. 颜色扫描 + 透明处理（背景色时先填充再扫描，无透明像素则不需要透明键）
+  const useBackground = !!backgroundColor
+  if (useBackground) {
+    for (let i = 0; i < canvases.length; i++) {
+      throwIfAborted(signal)
+      fillTransparentWithColor(canvases[i].canvas, backgroundColor)
+      if (i % 3 === 2) await yieldToUI()
+    }
+  }
   const { map: colorMap, overflow } = scanColors(canvases, colorLimit)
-  const key = pickTransparentKey(colorMap)
   const useGlobalPalette = !overflow
-
-  // 4. 透明像素替换为透明键色
-  for (let i = 0; i < canvases.length; i++) {
-    throwIfAborted(signal)
-    replaceTransparent(canvases[i].canvas, key)
-    if (i % 3 === 2) await yieldToUI()
+  let key = null
+  if (!useBackground) {
+    key = pickTransparentKey(colorMap)
+    // 4. 透明像素替换为透明键色
+    for (let i = 0; i < canvases.length; i++) {
+      throwIfAborted(signal)
+      replaceTransparent(canvases[i].canvas, key)
+      if (i % 3 === 2) await yieldToUI()
+    }
   }
 
   // 5. 编码
   throwIfAborted(signal)
   const first = canvases[0].canvas
   const encoderOptions = {
-    workers: options.workers ?? 4,
+    workers: options.workers ?? pickWorkerCount(),
     quality,
     width: first.width,
     height: first.height,
     workerScript: options.workerScript ?? workerUrl,
-    transparent: key.num
+    repeat: options.repeat === undefined ? 0 : Math.max(0, Math.floor(options.repeat))
+  }
+  if (!useBackground) {
+    encoderOptions.transparent = key.num
   }
   if (useGlobalPalette) {
-    // 全局调色板：实际颜色 + 透明键，按 colorLimit 截断后补齐到 256（LSD 固定 8 位表）
+    // 全局调色板：实际颜色 + 透明键（透明背景时），按 colorLimit 截断后补齐到 256（LSD 固定 8 位表）
     const palette = []
     let count = 0
     for (const rgb of colorMap.values()) {
@@ -244,7 +289,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
       palette.push(rgb[0], rgb[1], rgb[2])
       count++
     }
-    palette.push(key.r, key.g, key.b)
+    if (key) palette.push(key.r, key.g, key.b)
     while (palette.length < 256 * 3) palette.push(0)
     encoderOptions.globalPalette = palette.slice(0, 256 * 3)
   }
