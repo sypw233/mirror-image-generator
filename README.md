@@ -27,12 +27,12 @@ npm run lint       # 运行 JavaScript Standard Style 检查
 
 | 入口 | 说明 |
 | --- | --- |
-| `tests/browser-harness.html` | GIF 处理管线断言：帧数 / 画布尺寸 / 全画幅合成 / 帧延迟保持 / 镜像对称抽样 / 保持原尺寸等比缩放等 17 项 |
+| `tests/browser-harness.html` | GIF 处理管线断言：帧数 / 画布尺寸 / 全画幅合成 / 帧延迟保持 / 镜像对称抽样 / 保持原尺寸等比缩放 / 质量档位 / 取消等 19 项 |
 | `tests/mirror-harness.html` | 静态图镜像算法断言：四方向尺寸 / 水平垂直对称性 / 镜像块位置 / keepOriginalSize 等比缩放 / 方向区分等 25 项 |
 | `tests/ui-test.html?type=png` | UI 集成测试（静态图场景，自动注入 base64 图片） |
 | `tests/ui-test.html?type=gif` | UI 集成测试（GIF 场景，验证局部帧合成与透明背景） |
 
-测试素材位于 `public/test/*.gif`（由 Python PIL 生成：全画幅、局部帧+透明、自定义延迟、局部帧等用例）。
+测试素材以 base64 文本存放于 `public/fixtures/*.gif.b64`（全画幅、局部帧+透明、自定义延迟、局部帧等用例），测试台运行时解码为二进制，克隆仓库后无需二进制文件即可运行全部测试。
 
 辅助脚本：
 - `.analysis/inspect_gif.mjs`：用 gifuct-js 检查 GIF 帧结构（需在项目目录内运行）
@@ -62,3 +62,10 @@ npm run lint       # 运行 JavaScript Standard Style 检查
 - **复制失败提示**：复制图片失败时显示错误提示，不再无反馈
 - **处理耗时显示**：结果信息栏追加处理耗时（如 `耗时 412ms`）
 - **lint 配置修正**：移除与代码风格冲突的 `jsx-quotes: prefer-double` 规则（standard 默认不启用该规则，且代码使用单引号）
+
+## 主要改动记录（第三轮：深入优化）
+- **处理取消（AbortSignal）**：`processGif` 支持 `signal` 参数，逐帧镜像/透明替换/编码前检查中止并快速抛出 `AbortError`；切换图片、重置、滑块快速拖动时自动取消上一次未完成的处理，避免并发任务占用 CPU/内存
+- **GIF 输出质量选项**：新增「高质量 / 标准 / 小体积」三档（采样质量 + 全局调色板颜色 256/128/64），仅 GIF 场景显示；信息栏不再只显示固定质量结果
+- **大图尺寸保护**：超大 GIF（画布像素 > 2500 万 或 总像素 > 2 亿）与超大静态图（> 5000 万像素）在处理前报错提示，避免浏览器卡死
+- **测试素材 fixtures 化**：GIF 测试素材改为 `public/fixtures/*.gif.b64`（base64 文本），测试台运行时 `atob` 解码为二进制，克隆仓库后无需二进制文件即可运行全部测试（不再依赖 push 二进制）
+- **测试扩充**：`tests/browser-harness.html` 新增「质量-低档」「取消-已中止信号」断言，17 → 19 项
