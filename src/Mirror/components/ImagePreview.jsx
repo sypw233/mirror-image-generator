@@ -16,7 +16,16 @@ function formatElapsed (ms) {
   return `${ms}ms`
 }
 
-export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, processing, onDownload, onCopy }) {
+/** 计算 contain 布局下图片内容在容器中的实际矩形（供镜像轴定位） */
+function computeContainBox (imgW, imgH, cw, ch) {
+  if (!imgW || !imgH || !cw || !ch) return null
+  const scale = Math.min(cw / imgW, ch / imgH)
+  const w = imgW * scale
+  const h = imgH * scale
+  return { left: (cw - w) / 2, top: (ch - h) / 2, width: w, height: h }
+}
+
+export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, processing, onDownload, onCopy, direction }) {
   // 仅在结果变化时创建 URL，避免每次渲染重建导致图片闪烁
   const resultUrl = useMemo(() => {
     if (!resultBlob) return null
@@ -27,6 +36,13 @@ export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, pr
       if (resultUrl) URL.revokeObjectURL(resultUrl)
     }
   }, [resultUrl])
+  // 结果图内容矩形（相对预览容器），用于绘制镜像轴
+  const [axisBox, setAxisBox] = useState(null)
+  const handleResultLoad = (e) => {
+    const wrap = e.target.parentElement
+    if (!wrap) return
+    setAxisBox(computeContainBox(e.target.naturalWidth, e.target.naturalHeight, wrap.clientWidth, wrap.clientHeight))
+  }
   const [copied, setCopied] = useState(false)
   useEffect(() => {
     setCopied(false)
@@ -63,7 +79,29 @@ export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, pr
           <div className='mirror-preview-img-wrap'>
             {resultUrl
               ? (
-                <img src={resultUrl} alt='镜像结果' className='mirror-preview-img' />
+                <>
+                  <img src={resultUrl} alt='镜像结果' className='mirror-preview-img' onLoad={handleResultLoad} />
+                  {/* 镜像轴虚线：直观展示对称边界 */}
+                  {axisBox && !processing && direction && (
+                    <div
+                      className='mirror-preview-axis'
+                      style={{ left: axisBox.left, top: axisBox.top, width: axisBox.width, height: axisBox.height }}
+                    >
+                      {(direction === 'left' || direction === 'right') && <div className='mirror-axis-line mirror-axis-v' />}
+                      {(direction === 'top' || direction === 'bottom') && <div className='mirror-axis-line mirror-axis-h' />}
+                      {direction === 'br' && (
+                        <svg className='mirror-axis-svg' viewBox='0 0 100 100' preserveAspectRatio='none'>
+                          <line x1='0' y1='0' x2='100' y2='100' />
+                        </svg>
+                      )}
+                      {direction === 'tl' && (
+                        <svg className='mirror-axis-svg' viewBox='0 0 100 100' preserveAspectRatio='none'>
+                          <line x1='100' y1='0' x2='0' y2='100' />
+                        </svg>
+                      )}
+                    </div>
+                  )}
+                </>
                 )
               : (
                 <div className='mirror-preview-placeholder'>

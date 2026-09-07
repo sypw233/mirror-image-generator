@@ -169,13 +169,14 @@ function replaceTransparent (canvas, key) {
  * GIF 镜像处理：
  * 解码 → 全画幅合成 → 逐帧镜像 → 透明处理 → gif.js 编码
  * @param {ArrayBuffer} arrayBuffer
- * @param {string} direction left|right|top|bottom
+ * @param {string} direction left|right|top|bottom|tl|br
  * @param {number} ratio 镜像比例 1-100
  * @param {boolean} keepOriginalSize
  * @param {(p:number)=>void} onProgress 0-100
- * @param {{workerScript?:string, workers?:number, signal?:AbortSignal, quality?:number, colors?:number}} [options]
+ * @param {{workerScript?:string, workers?:number, signal?:AbortSignal, quality?:number, colors?:number, maxEdge?:number}} [options]
  *   quality: gif.js 采样质量 1-30（越小越精细），默认 10
  *   colors: 全局调色板颜色上限，默认 256
+ *   maxEdge: 导出长边上限（像素），超出时等比缩小，默认不限
  */
 export async function processGif (arrayBuffer, direction, ratio, keepOriginalSize, onProgress, options = {}) {
   const signal = options.signal
@@ -203,7 +204,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
   for (let i = 0; i < total; i++) {
     throwIfAborted(signal)
     const fullCanvas = imageDataToCanvas(composed[i])
-    const mirrored = mirrorFrame(fullCanvas, direction, ratio, keepOriginalSize)
+    const mirrored = mirrorFrame(fullCanvas, direction, ratio, keepOriginalSize, options.maxEdge)
     // gifuct 已将 gce.delay(厘秒) 转为毫秒，最小 100ms
     const delay = Math.max(10, frames[i].delay || 100)
     canvases.push({ canvas: mirrored, delay })

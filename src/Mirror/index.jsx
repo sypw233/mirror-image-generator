@@ -24,7 +24,8 @@ export default function Mirror ({ enterAction }) {
     direction: 'left',
     ratio: 50,
     keepOriginalSize: false,
-    quality: 'high'
+    quality: 'high',
+    maxEdge: 0
   })
   const [resultBlob, setResultBlob] = useState(null)
   const [progress, setProgress] = useState(0)
@@ -76,7 +77,7 @@ export default function Mirror ({ enterAction }) {
           controls.ratio,
           controls.keepOriginalSize,
           setProgress,
-          { signal: controller.signal, quality: q.quality, colors: q.colors }
+          { signal: controller.signal, quality: q.quality, colors: q.colors, maxEdge: controls.maxEdge }
         )
       } else {
         // 让出主线程，先让“处理中”状态绘制出来
@@ -90,7 +91,8 @@ export default function Mirror ({ enterAction }) {
           img,
           controls.direction,
           controls.ratio,
-          controls.keepOriginalSize
+          controls.keepOriginalSize,
+          controls.maxEdge
         )
         blob = await canvasToBlob(canvas)
       }
@@ -253,6 +255,7 @@ export default function Mirror ({ enterAction }) {
             isGif={isGif}
             info={resultInfo}
             processing={processing}
+            direction={controls.direction}
             onDownload={handleDownload}
             onCopy={handleCopy}
           />
