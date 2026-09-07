@@ -86,3 +86,12 @@ npm run lint       # 运行 JavaScript Standard Style 检查
 - **对角线斜切重做**：将「原块 + 转置块对角摆放成 2c×2c 方形」改为真正的「斜切」——输出 c×c 方形，画面被对角线一分为二、两侧严格对称，消除透明象限与「两个方形」观感；`drawTransposed` 由 `drawDiagonalMirror` 替代（先整块复制、再 Uint32 批量逐像素覆盖另一侧三角，在临时画布完成后再合成）
 - **布局优化**：方向按钮图标与文字间距 1px → 3px、按钮高度增大（31px → 42px），控件组行距 8px → 11px，背景色块间距与留白加大，历史记录项增高并给方向标签留白，信息栏内边距与字距微调；多宽度（420/560/760/960px）程序化检测无文字重叠、无横向溢出
 - **测试扩充**：`tests/mirror-harness.html` 对角线用例重写为 11 项（尺寸 / 主副对角线对称 / 内容沿轴保留 / 无透明），44 → 51 项
+
+## 主要改动记录（批次 B+C：背景色 / WebP 输出 / GIF 速度与循环 / 历史记录）
+- **背景色填充**：镜像画布铺底 + 「保持原尺寸」留白填充所选背景色（透明 / 白 / 黑 / 红 / 蓝 / 绿 / 黄 + `<input type=color>` 自定义取色器）；GIF 先 `fillTransparentWithColor` 再扫描，有背景色时不设置透明键，保证背景纯色不透明；静态图与 GIF 通用
+- **WebP 输出**：静态图新增输出格式「PNG / WebP」（`canvas.toBlob(canvas, 'image/webp', 0.9)`），下载扩展名自动切换；GIF 仍固定输出 GIF
+- **GIF 播放速度**：「0.5x / 1x / 2x」倍速档，`delay = 原始delay / speed`（clamp ≥10ms）；注意 gif.js 以厘秒（10ms）粒度写入延迟，如 25ms 会被舍入为 30ms
+- **GIF 循环次数**：「无限 / 1 / 3 / 5 次」，透传 gif.js 的 repeat 参数（0 = 无限循环）
+- **Worker 数自适应**：GIF 编码 Worker 数由固定 4 改为 `min(4, navigator.hardwareConcurrency)`
+- **历史记录**：结果区底部展示最近 8 条处理缩略图（方向标签 + 当前项高亮 + 清空按钮）；同方向同格式时替换最近一条，新图 / 重置清空；点击缩略图恢复对应结果，镜像轴随历史方向还原（与当前控件方向解耦）；缩略图 ObjectURL 批量创建、卸载统一回收
+- **测试扩充**：`tests/mirror-harness.html` 新增背景色 5 项断言（39 → 44 项）；`tests/browser-harness.html` 新增速度 2 项 / 循环 2 项 / 背景色 2 项断言（19 → 25 项）
