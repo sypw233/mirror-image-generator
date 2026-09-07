@@ -101,6 +101,47 @@
       }
       return { sym, checked }
     }
+    // 对角拼接断言：镜像块 = 源块转置，即 pixel(a,b) == pixel(c+b, c+a)（a,b ∈ [0,c)）
+    function checkQuadTransposeSym (canvas, c) {
+      const d = pixels(canvas)
+      const S = canvas.width
+      let sym = true, checked = 0
+      for (let b = 0; b < c; b += 2) {
+        for (let a = 0; a < c; a += 2) {
+          checked++
+          if (!same(colorAt(d, S, a, b), colorAt(d, S, c + b, c + a))) { sym = false; break }
+        }
+        if (!sym) break
+      }
+      return { sym, checked }
+    }
+    // 空白象限断言：区域内全部透明（alpha=0）
+    function checkBlankQuadrant (canvas, x0, y0, w, h) {
+      const d = pixels(canvas)
+      const W = canvas.width
+      let blank = true
+      for (let y = y0; y < y0 + h; y += 3) {
+        for (let x = x0; x < x0 + w; x += 3) {
+          if (colorAt(d, W, x, y)[3] !== 0) { blank = false; break }
+        }
+        if (!blank) break
+      }
+      return blank
+    }
+    // 副对角线对称（tl，沿 x+y=S-1）：pixel(x,y) == pixel(S-1-y, S-1-x)
+    function checkAntiDiagSym (canvas) {
+      const d = pixels(canvas)
+      const S = canvas.width
+      let sym = true, checked = 0
+      for (let b = 0; b < Math.floor(S / 2); b += 2) {
+        for (let a = 0; a < S - b; a += 2) {
+          checked++
+          if (!same(colorAt(d, S, a, b), colorAt(d, S, S - 1 - b, S - 1 - a))) { sym = false; break }
+        }
+        if (!sym) break
+      }
+      return { sym, checked }
+    }
     const SRC = makeTestCanvas(80, 60)
     const RED = [231, 76, 60, 255]
     const YELLOW = [241, 196, 15, 255]
@@ -114,7 +155,10 @@
       ['top', 30, false, '80x36'], ['bottom', 30, false, '80x36'],
       ['left', 100, false, '160x60'], ['top', 100, false, '80x120'],
       ['left', 50, true, '80x60'], ['right', 50, true, '80x60'],
-      ['top', 100, true, '80x60'], ['bottom', 100, true, '80x60']
+      ['top', 100, true, '80x60'], ['bottom', 100, true, '80x60'],
+      ['br', 50, false, '60x60'], ['tl', 50, false, '60x60'],
+      ['br', 100, false, '120x120'], ['tl', 100, false, '120x120'],
+      ['br', 50, true, '80x60']
     ]
     for (const [dir, ratio, keep, expect] of sizeCases) {
       const out = mirrorImage(SRC, dir, ratio, keep)
@@ -154,6 +198,31 @@
       const yellowBottom = same(colorAt(d, out.width, out.width - 8, out.height - 8), YELLOW)
       record('内容-bottom', 'bottom 50% keep=false', '右下黄块保留在下方（原块在下）', true, yellowBottom, yellowBottom)
     }
+    // ===== 对角线镜像断言 =====
+    {
+      const out = mirrorImage(SRC, 'br', 50, false) // 60x60，源块左上 + 转置块右下
+      const { sym, checked } = checkQuadTransposeSym(out, 30)
+      record('对角转置-br', 'br 50% keep=false', '右下块=左上块转置（抽样 ' + checked + ' 点）', true, sym, sym)
+      // 内容位置：br 保留左上原块，左上红块在 (8,8)
+      const d = pixels(out)
+      const redTL = same(colorAt(d, out.width, 8, 8), RED)
+      record('内容-br', 'br 50% keep=false', '左上红块保留在输出左上（原块在左上）', true, redTL, redTL)
+      // 空白：右上/左下象限透明
+      const blank = checkBlankQuadrant(out, 0, 30, 30, 30) && checkBlankQuadrant(out, 30, 0, 30, 30)
+      record('空白-br', 'br 50% keep=false', '右上/左下象限透明（alpha=0）', true, blank, blank)
+    }
+    {
+      const out = mirrorImage(SRC, 'tl', 50, false) // 60x60，转置(180°)块左上 + 源块右下
+      const { sym, checked } = checkAntiDiagSym(out)
+      record('对角对称-tl', 'tl 50% keep=false', '沿副对角线 x+y=59 对称（抽样 ' + checked + ' 点）', true, sym, sym)
+      // 内容位置：tl 保留右下原块，右下黄块在 (52,52)
+      const d = pixels(out)
+      const yellowBR = same(colorAt(d, out.width, out.width - 8, out.height - 8), YELLOW)
+      record('内容-tl', 'tl 50% keep=false', '右下黄块保留在输出右下（原块在右下）', true, yellowBR, yellowBR)
+      // 空白：右上/左下象限透明
+      const blank = checkBlankQuadrant(out, 30, 0, 30, 30) && checkBlankQuadrant(out, 0, 30, 30, 30)
+      record('空白-tl', 'tl 50% keep=false', '右上/左下象限透明（alpha=0）', true, blank, blank)
+    }
     // ===== keepOriginalSize 等比缩放（contain，不裁切） =====
     {
       const out = mirrorImage(SRC, 'left', 100, true) // comp=160x60 → scale=0.5 → 居中，上下留白
@@ -181,6 +250,22 @@
       const edgeAlpha = colorAt(d, W, Math.floor(W * 0.5) - 1, Math.floor(H / 2))[3]
       const ok = out.width === 80 && out.height === 60 && edgeAlpha === 255
       record('keep-left50', 'left 50% keep=true', 'compW≤原宽时 scale=1 不缩放、无留白', '80x60 且边缘不透明', `${out.width}x${out.height} edge=${edgeAlpha}`, ok)
+    }
+    // ===== 导出长边上限（maxEdge 等比缩小） =====
+    {
+      const out = mirrorImage(SRC, 'left', 100, false, 100) // comp=160x60 → scale=100/160 → 100x38
+      const ok = out.width === 100 && out.height === 38
+      record('maxEdge-left100', 'left 100% maxEdge=100', '长边 160 → 100，等比缩小（100x38）', '100x38', `${out.width}x${out.height}`, ok)
+    }
+    {
+      const out = mirrorImage(SRC, 'br', 50, false, 50) // comp=60x60 → 50x50
+      const ok = out.width === 50 && out.height === 50
+      record('maxEdge-br50', 'br 50% maxEdge=50', '长边 60 → 50，等比缩小（50x50）', '50x50', `${out.width}x${out.height}`, ok)
+    }
+    {
+      const out = mirrorImage(SRC, 'left', 50, false, 4096) // comp=80x60 长边 80 < 4096 不缩放
+      const ok = out.width === 80 && out.height === 60
+      record('maxEdge-不缩放', 'left 50% maxEdge=4096', '长边未超上限时不缩放', '80x60', `${out.width}x${out.height}`, ok)
     }
     // ===== 方向区分正确性：left 与 right 内容不应相同 =====
     {
