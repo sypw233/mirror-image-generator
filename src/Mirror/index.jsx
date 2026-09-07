@@ -25,13 +25,19 @@ export default function Mirror ({ enterAction }) {
     ratio: 50,
     keepOriginalSize: false,
     quality: 'high',
-    maxEdge: 0
+    maxEdge: 0,
+    backgroundColor: null,
+    outputFormat: 'png',
+    gifSpeed: 1,
+    gifRepeat: 0
   })
   const [resultBlob, setResultBlob] = useState(null)
   const [progress, setProgress] = useState(0)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState('')
   const [resultInfo, setResultInfo] = useState(null)
+  const [displayDirection, setDisplayDirection] = useState('left')
+  const [history, setHistory] = useState([])
   const runIdRef = useRef(0)
   const processingRef = useRef(false)
   const abortRef = useRef(null)
@@ -77,7 +83,15 @@ export default function Mirror ({ enterAction }) {
           controls.ratio,
           controls.keepOriginalSize,
           setProgress,
-          { signal: controller.signal, quality: q.quality, colors: q.colors, maxEdge: controls.maxEdge }
+          {
+            signal: controller.signal,
+            quality: q.quality,
+            colors: q.colors,
+            maxEdge: controls.maxEdge,
+            backgroundColor: controls.backgroundColor,
+            speed: controls.gifSpeed,
+            repeat: controls.gifRepeat
+          }
         )
       } else {
         // 让出主线程，先让“处理中”状态绘制出来
@@ -92,16 +106,19 @@ export default function Mirror ({ enterAction }) {
           controls.direction,
           controls.ratio,
           controls.keepOriginalSize,
-          controls.maxEdge
+          controls.maxEdge,
+          controls.backgroundColor
         )
-        blob = await canvasToBlob(canvas)
+        blob = await canvasToBlob(canvas, controls.outputFormat === 'webp' ? 'image/webp' : 'image/png', 0.9)
       }
       if (runId !== runIdRef.current) return // 丢弃过期结果
       setResultBlob(blob)
+      setDisplayDirection(controls.direction)
       const info = await readImageInfo(blob, isGif, gifMeta)
       info.elapsedMs = Math.round(performance.now() - t0)
       if (runId !== runIdRef.current) return
       setResultInfo(info)
+      pushHistory(blob, controls.direction, info)
     } catch (err) {
       // 主动取消（新任务已接管）时不打扰用户
       if (err?.name === 'AbortError') return
@@ -182,15 +199,45 @@ export default function Mirror ({ enterAction }) {
     setProgress(0)
     setError('')
     setResultInfo(null)
+    setHistory([]) // 新图片清空历史
+    setDisplayDirection('left')
   }
 
   const handleControlsChange = (newControls) => {
     setControls(newControls)
   }
 
+  /** 记录历史：与最近一条同方向同格式时替换，否则新增；上限 8 条 */
+  const pushHistory = (blob, direction, info) => {
+    const format = isGif ? 'gif' : controls.outputFormat
+    setHistory((prev) => {
+      const last = prev[0]
+      const same = !!last && last.direction === direction && last.format === format
+      const item = {
+        id: Date.now() + Math.random(),
+        blob,
+        direction,
+        isGif,
+        info,
+        fileName,
+        format,
+        ts: Date.now()
+      }
+      const next = same ? [item, ...prev.slice(1)] : [item, ...prev]
+      return next.slice(0, 8)
+    })
+  }
+
+  /** 恢复历史结果：仅切换展示，不触发重新处理 */
+  const handleRestoreHistory = (item) => {
+    setResultBlob(item.blob)
+    setResultInfo(item.info)
+    setDisplayDirection(item.direction)
+  }
+
   const handleDownload = async () => {
     if (!resultBlob) return
-    const ext = isGif ? 'gif' : 'png'
+    const ext = isGif ? 'gif' : (controls.outputFormat === 'webp' ? 'webp' : 'png')
     const baseName = fileName.replace(/\.[^.]+$/, '')
     const downloadName = `${baseName}_mirror.${ext}`
     await saveFile(resultBlob, downloadName)
@@ -214,6 +261,8 @@ export default function Mirror ({ enterAction }) {
     setProgress(0)
     setError('')
     setResultInfo(null)
+    setHistory([])
+    setDisplayDirection('left')
   }
 
   return (
@@ -240,7 +289,13 @@ export default function Mirror ({ enterAction }) {
             )}
           </div>
           {error && <div className='mirror-error'>{error}</div>}
-          <MirrorControls onChange={handleControlsChange} disabled={processing} showQuality={isGif} />
+          <MirrorControls
+            onChange={handleControlsChange}
+            disabled={processing}
+            showQuality={isGif}
+            showOutputFormat={!isGif}
+            showGifOptions={isGif}
+          />
           {processing && (
             <div className='mirror-progress'>
               <div className='mirror-progress-bar'>
@@ -255,9 +310,10 @@ export default function Mirror ({ enterAction }) {
             isGif={isGif}
             info={resultInfo}
             processing={processing}
-            direction={controls.direction}
+            direction={displayDirection}
             onDownload={handleDownload}
             onCopy={handleCopy}
+            history={{ items: history, onRestore: handleRestoreHistory, onClear: () => setHistory([]) }}
           />
         </>
       )}
@@ -282,12 +338,12 @@ function loadImage (buffer) {
   })
 }
 
-function canvasToBlob (canvas) {
+function canvasToBlob (canvas, mime, quality) {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob)
       else reject(new Error('图片编码失败'))
-    }, 'image/png')
+    }, mime || 'image/png', quality)
   })
 }
 
