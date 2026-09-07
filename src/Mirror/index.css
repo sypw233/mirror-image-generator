@@ -91,7 +91,7 @@
 }
 
 .mirror-control-group {
-  margin-bottom: 8px;
+  margin-bottom: 11px;
 }
 
 .mirror-control-group:last-child {
@@ -103,7 +103,7 @@
   align-items: center;
   justify-content: space-between;
   font-size: 11px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   color: #666;
   font-weight: 500;
 }
@@ -124,8 +124,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-  padding: 4px 2px 3px;
+  gap: 3px;
+  padding: 6px 2px 5px;
   border: 1px solid #e0e0e0;
   border-radius: 6px;
   background: #fafafa;
@@ -147,14 +147,15 @@
 }
 
 .mirror-dir-icon {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1;
 }
 
 .mirror-dir-label {
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 500;
-  line-height: 1;
+  line-height: 1.3;
+  letter-spacing: 0.2px;
 }
 
 .mirror-slider-wrap {
@@ -289,7 +290,7 @@
 
 .mirror-preview-title {
   font-size: 11px;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   color: #888;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -565,7 +566,8 @@
   font-variant-numeric: tabular-nums;
   background: rgba(0, 0, 0, 0.025);
   border-radius: 8px;
-  padding: 5px 10px;
+  padding: 6px 12px;
+  letter-spacing: 0.2px;
 }
 .mirror-preview-img-wrap {
   position: relative;
@@ -678,14 +680,14 @@
 .mirror-bg-options {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 4px;
+  gap: 8px;
+  margin-top: 7px;
   flex-wrap: wrap;
 }
 .mirror-bg-swatch {
   position: relative;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   border: 1px solid #d8d8d8;
   background: #fff;
@@ -732,13 +734,13 @@
 }
 .mirror-history {
   border-top: 1px solid #eee;
-  padding-top: 6px;
+  padding-top: 8px;
 }
 .mirror-history-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .mirror-history-title {
   font-size: 11px;
@@ -767,7 +769,7 @@
 }
 .mirror-history-item {
   flex-shrink: 0;
-  width: 56px;
+  width: 60px;
   padding: 0;
   border: 2px solid transparent;
   border-radius: 8px;
@@ -787,16 +789,16 @@
 }
 .mirror-history-thumb {
   width: 100%;
-  height: 44px;
+  height: 46px;
   object-fit: cover;
   display: block;
   background: #fff;
 }
 .mirror-history-meta {
-  font-size: 9px;
+  font-size: 10px;
   color: #888;
-  line-height: 1.6;
-  padding: 1px 0;
+  line-height: 1.5;
+  padding: 4px 0 3px;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;

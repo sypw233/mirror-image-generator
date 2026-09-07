@@ -101,15 +101,15 @@
       }
       return { sym, checked }
     }
-    // 对角拼接断言：镜像块 = 源块转置，即 pixel(a,b) == pixel(c+b, c+a)（a,b ∈ [0,c)）
-    function checkQuadTransposeSym (canvas, c) {
+    // 主对角线对称（br，沿 y=x）：pixel(x,y) == pixel(y,x)
+    function checkMainDiagSym (canvas) {
       const d = pixels(canvas)
       const S = canvas.width
       let sym = true, checked = 0
-      for (let b = 0; b < c; b += 2) {
-        for (let a = 0; a < c; a += 2) {
+      for (let y = 0; y < S; y += 2) {
+        for (let x = y + 1; x < S; x += 2) {
           checked++
-          if (!same(colorAt(d, S, a, b), colorAt(d, S, c + b, c + a))) { sym = false; break }
+          if (!same(colorAt(d, S, x, y), colorAt(d, S, y, x))) { sym = false; break }
         }
         if (!sym) break
       }
@@ -156,8 +156,8 @@
       ['left', 100, false, '160x60'], ['top', 100, false, '80x120'],
       ['left', 50, true, '80x60'], ['right', 50, true, '80x60'],
       ['top', 100, true, '80x60'], ['bottom', 100, true, '80x60'],
-      ['br', 50, false, '60x60'], ['tl', 50, false, '60x60'],
-      ['br', 100, false, '120x120'], ['tl', 100, false, '120x120'],
+      ['br', 50, false, '30x30'], ['tl', 50, false, '30x30'],
+      ['br', 100, false, '60x60'], ['tl', 100, false, '60x60'],
       ['br', 50, true, '80x60']
     ]
     for (const [dir, ratio, keep, expect] of sizeCases) {
@@ -198,30 +198,56 @@
       const yellowBottom = same(colorAt(d, out.width, out.width - 8, out.height - 8), YELLOW)
       record('内容-bottom', 'bottom 50% keep=false', '右下黄块保留在下方（原块在下）', true, yellowBottom, yellowBottom)
     }
-    // ===== 对角线镜像断言 =====
+    // ===== 对角线镜像（斜切）断言 =====
     {
-      const out = mirrorImage(SRC, 'br', 50, false) // 60x60，源块左上 + 转置块右下
-      const { sym, checked } = checkQuadTransposeSym(out, 30)
-      record('对角转置-br', 'br 50% keep=false', '右下块=左上块转置（抽样 ' + checked + ' 点）', true, sym, sym)
-      // 内容位置：br 保留左上原块，左上红块在 (8,8)
+      // br 50%：30x30，主对角线斜切，两侧对称、无透明
+      const out = mirrorImage(SRC, 'br', 50, false) // c = min(80,60)×0.5 = 30
+      const okSize = out.width === 30 && out.height === 30
+      record('对角尺寸-br50', 'br 50% keep=false', '输出为 c×c 方形（30x30）', '30x30', `${out.width}x${out.height}`, okSize)
+      const { sym, checked } = checkMainDiagSym(out)
+      record('对角对称-br', 'br 50% keep=false', '沿主对角线 y=x 对称（抽样 ' + checked + ' 点）', true, sym, sym)
+      // 内容：源图左上红块在轴上 (5,5) 保留（斜线一侧为原内容）
       const d = pixels(out)
-      const redTL = same(colorAt(d, out.width, 8, 8), RED)
-      record('内容-br', 'br 50% keep=false', '左上红块保留在输出左上（原块在左上）', true, redTL, redTL)
-      // 空白：右上/左下象限透明
-      const blank = checkBlankQuadrant(out, 0, 30, 30, 30) && checkBlankQuadrant(out, 30, 0, 30, 30)
-      record('空白-br', 'br 50% keep=false', '右上/左下象限透明（alpha=0）', true, blank, blank)
+      const redAxis = same(colorAt(d, out.width, 5, 5), RED)
+      record('对角内容-br', 'br 50% keep=false', '左上红块沿轴保留（原内容在斜线一侧）', true, redAxis, redAxis)
+      // 无透明：斜切画面为完整方形
+      let alpha0 = 0
+      for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
+      record('对角无透明-br', 'br 50% keep=false', '画面无透明像素（两半拼满）', 0, alpha0, alpha0 === 0)
     }
     {
-      const out = mirrorImage(SRC, 'tl', 50, false) // 60x60，转置(180°)块左上 + 源块右下
+      // tl 50%：30x30，副对角线斜切，两侧对称、无透明
+      const out = mirrorImage(SRC, 'tl', 50, false)
+      const okSize = out.width === 30 && out.height === 30
+      record('对角尺寸-tl50', 'tl 50% keep=false', '输出为 c×c 方形（30x30）', '30x30', `${out.width}x${out.height}`, okSize)
       const { sym, checked } = checkAntiDiagSym(out)
-      record('对角对称-tl', 'tl 50% keep=false', '沿副对角线 x+y=59 对称（抽样 ' + checked + ' 点）', true, sym, sym)
-      // 内容位置：tl 保留右下原块，右下黄块在 (52,52)
+      record('对角对称-tl', 'tl 50% keep=false', '沿副对角线 x+y=29 对称（抽样 ' + checked + ' 点）', true, sym, sym)
       const d = pixels(out)
-      const yellowBR = same(colorAt(d, out.width, out.width - 8, out.height - 8), YELLOW)
-      record('内容-tl', 'tl 50% keep=false', '右下黄块保留在输出右下（原块在右下）', true, yellowBR, yellowBR)
-      // 空白：右上/左下象限透明
-      const blank = checkBlankQuadrant(out, 30, 0, 30, 30) && checkBlankQuadrant(out, 0, 30, 30, 30)
-      record('空白-tl', 'tl 50% keep=false', '右上/左下象限透明（alpha=0）', true, blank, blank)
+      let alpha0 = 0
+      for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
+      record('对角无透明-tl', 'tl 50% keep=false', '画面无透明像素（两半拼满）', 0, alpha0, alpha0 === 0)
+    }
+    {
+      // br/tl 100%：60x60 斜切
+      const outBr = mirrorImage(SRC, 'br', 100, false)
+      const brSize = outBr.width === 60 && outBr.height === 60
+      record('对角尺寸-br100', 'br 100% keep=false', '输出 c×c 方形（60x60）', '60x60', `${outBr.width}x${outBr.height}`, brSize)
+      const { sym: brSym } = checkMainDiagSym(outBr)
+      record('对角对称-br100', 'br 100% keep=false', '主对角线对称', true, brSym, brSym)
+      const outTl = mirrorImage(SRC, 'tl', 100, false)
+      const tlSize = outTl.width === 60 && outTl.height === 60
+      record('对角尺寸-tl100', 'tl 100% keep=false', '输出 c×c 方形（60x60）', '60x60', `${outTl.width}x${outTl.height}`, tlSize)
+      const { sym: tlSym } = checkAntiDiagSym(outTl)
+      record('对角对称-tl100', 'tl 100% keep=false', '副对角线对称', true, tlSym, tlSym)
+    }
+    {
+      // keep：br 50% keep=true → 原尺寸 80x60，30x30 内容等比缩放居中
+      const out = mirrorImage(SRC, 'br', 50, true)
+      const okSize = out.width === 80 && out.height === 60
+      record('对角尺寸-br50-keep', 'br 50% keep=true', '输出保持原图尺寸 80x60', '80x60', `${out.width}x${out.height}`, okSize)
+      const d = pixels(out)
+      const centerAlpha = colorAt(d, out.width, Math.floor(out.width / 2), Math.floor(out.height / 2))[3]
+      record('对角keep-中心有内容', 'br 50% keep=true', '等比缩放居中（中心有内容）', 'alpha=255', `center=${centerAlpha}`, centerAlpha === 255)
     }
     // ===== keepOriginalSize 等比缩放（contain，不裁切） =====
     {
@@ -258,9 +284,9 @@
       record('maxEdge-left100', 'left 100% maxEdge=100', '长边 160 → 100，等比缩小（100x38）', '100x38', `${out.width}x${out.height}`, ok)
     }
     {
-      const out = mirrorImage(SRC, 'br', 50, false, 50) // comp=60x60 → 50x50
+      const out = mirrorImage(SRC, 'br', 100, false, 50) // comp=60x60 → 50x50
       const ok = out.width === 50 && out.height === 50
-      record('maxEdge-br50', 'br 50% maxEdge=50', '长边 60 → 50，等比缩小（50x50）', '50x50', `${out.width}x${out.height}`, ok)
+      record('maxEdge-br100', 'br 100% maxEdge=50', '长边 60 → 50，等比缩小（50x50）', '50x50', `${out.width}x${out.height}`, ok)
     }
     {
       const out = mirrorImage(SRC, 'left', 50, false, 4096) // comp=80x60 长边 80 < 4096 不缩放
@@ -269,39 +295,22 @@
     }
     // ===== 背景色（backgroundColor 第 6 参） =====
     {
-      // bg 白 + br 50%：空白象限被填白（不透明且为白色），源内容保留
-      const out = mirrorImage(SRC, 'br', 50, false, 0, '#ffffff')
+      // bg 白 + br 50% keep=true：缩放留白填白，中心内容保留
+      const out = mirrorImage(SRC, 'br', 50, true, 0, '#ffffff')
       const d = pixels(out)
-      const stillBlank = checkBlankQuadrant(out, 0, 30, 30, 30) && checkBlankQuadrant(out, 30, 0, 30, 30)
-      let white = true
-      for (let y = 0; y < 30; y += 4) {
-        for (let x = 30; x < 60; x += 4) {
-          const px = colorAt(d, out.width, x, y)
-          if (px[3] !== 255 || px[0] !== 255 || px[1] !== 255 || px[2] !== 255) { white = false; break }
-        }
-        if (!white) break
-      }
-      const redTL = same(colorAt(d, out.width, 8, 8), RED)
-      record('背景-br50-白', 'br 50% bg=#ffffff', '空白象限填充白色（不透明）且左上红块保留', '空白=白+内容保留', `blank=${stillBlank} white=${white} red=${redTL}`, !stillBlank && white && redTL)
+      const corner = colorAt(d, out.width, 1, 1)
+      const centerAlpha = colorAt(d, out.width, Math.floor(out.width / 2), Math.floor(out.height / 2))[3]
+      const cornerWhite = corner[3] === 255 && corner[0] === 255 && corner[1] === 255 && corner[2] === 255
+      record('背景-对角keep-白', 'br 50% keep=true bg=#ffffff', '缩放留白填充白色、中心有内容', '留白=白+中心不透明', `corner=${cornerWhite} center=${centerAlpha}`, cornerWhite && centerAlpha === 255)
     }
     {
-      // bg 红 + tl 50%：空白象限填红，右下黄块保留
-      const out = mirrorImage(SRC, 'tl', 50, false, 0, '#ff0000')
+      // bg 红 + br 50%：斜切主体本身无透明，背景色不影响内容保留
+      const out = mirrorImage(SRC, 'br', 50, false, 0, '#ff0000')
       const d = pixels(out)
-      const RED_BG = [255, 0, 0, 255]
-      let allRed = true
-      const quads = [[30, 0, 30, 30], [0, 30, 30, 30]]
-      for (const [qx, qy, qw, qh] of quads) {
-        for (let y = qy; y < qy + qh; y += 4) {
-          for (let x = qx; x < qx + qw; x += 4) {
-            if (!same(colorAt(d, out.width, x, y), RED_BG)) { allRed = false; break }
-          }
-          if (!allRed) break
-        }
-        if (!allRed) break
-      }
-      const yellowBR = same(colorAt(d, out.width, out.width - 8, out.height - 8), YELLOW)
-      record('背景-tl50-红', 'tl 50% bg=#ff0000', '空白象限填充红色且右下黄块保留', '空白=红+内容保留', `red=${allRed} yellow=${yellowBR}`, allRed && yellowBR)
+      let alpha0 = 0
+      for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
+      const redAxis = same(colorAt(d, out.width, 5, 5), RED)
+      record('背景-对角br-红', 'br 50% bg=#ff0000', '斜切主体无透明且原内容保留', '无 alpha=0 + 红块在', `alpha0=${alpha0} red=${redAxis}`, alpha0 === 0 && redAxis)
     }
     {
       // bg 黑 + left 50%：输出无任何透明像素

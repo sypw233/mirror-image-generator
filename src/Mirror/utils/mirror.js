@@ -4,10 +4,11 @@
  * 逻辑：按方向从原图取 `ratio%` 的裁剪块，用 canvas 翻转拼接成对称图。
  * - left/right  ：水平镜像（原块 + 水平翻转块），输出宽度 = 2 × 裁剪宽
  * - top/bottom  ：垂直镜像（原块 + 垂直翻转块），输出高度 = 2 × 裁剪高
- * - tl/br       ：对角线镜像（原块 + 转置块），取方形裁剪区，输出为 2c × 2c 正方形，
- *                 br 沿主对角线（\）对称展开，tl 沿副对角线（/）对称展开
+ * - tl/br       ：对角线镜像（斜切），取方形裁剪区（边长 c = min(宽,高) × ratio），输出 c × c 方形，
+ *                 画面被对角线一分为二：br 沿主对角线（\）斜切、tl 沿副对角线（/）斜切，
+ *                 一侧保留原内容、另一侧填充对角镜像，两侧沿对角线严格对称、无透明区域
  * - keepOriginalSize：输出保持原图尺寸，组合结果等比缩放（仅当超出时缩小）并居中，避免裁切
- * - backgroundColor：非空时输出不透明，所有透明区域（源图透明 / 空白象限 / 缩放留白）填充该颜色
+ * - backgroundColor：非空时输出不透明，所有透明区域（源图透明 / 缩放留白）填充该颜色
  * @param {CanvasImageSource} imageData canvas 或 Image
  * @param {string} direction left|right|top|bottom|tl|br
  * @param {number} ratio 镜像比例 1-100
@@ -50,8 +51,8 @@ export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxE
   const mirrorOnLeft = direction === 'right'
   const mirrorOnTop = direction === 'bottom'
 
-  const compW = isHorizontal ? clipW * 2 : isDiagonal ? clipW * 2 : srcW
-  const compH = isVertical ? clipH * 2 : isDiagonal ? clipH * 2 : srcH
+  const compW = isHorizontal ? clipW * 2 : isDiagonal ? clipW : srcW
+  const compH = isVertical ? clipH * 2 : isDiagonal ? clipH : srcH
 
   // 组合画布：原块 + 翻转块（背景色时先铺底，透明区域显示背景色）
   const comp = document.createElement('canvas')
@@ -64,16 +65,8 @@ export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxE
   }
 
   if (isDiagonal) {
-    const c = clipW
-    if (direction === 'br') {
-      // 原块左上 + 转置块右下（沿主对角线 \ 对称）
-      ctx.drawImage(imageData, clipX, clipY, c, c, 0, 0, c, c)
-      drawTransposed(ctx, imageData, clipX, clipY, c, c, c, c, false)
-    } else {
-      // 原块右下 + 转置(180°旋转)块左上（沿副对角线 / 对称）
-      drawTransposed(ctx, imageData, clipX, clipY, c, c, 0, 0, true)
-      ctx.drawImage(imageData, clipX, clipY, c, c, c, c, c, c)
-    }
+    // 对角线斜切：画面被对角线一分为二，一侧保留原内容、另一侧填充对角镜像
+    drawDiagonalMirror(ctx, imageData, clipX, clipY, clipW, direction)
   } else if (isHorizontal) {
     const srcX = mirrorOnLeft ? clipW : 0
     const mirrorX = mirrorOnLeft ? 0 : clipW
@@ -127,46 +120,47 @@ export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxE
 }
 
 /**
- * 转置（对角线镜像）绘制：把源图 (sx,sy,sw,sh) 区域转置（像素 (x,y)→(y,x)）画到目标画布 (dx,dy)。
+ * 对角线"斜切"镜像：取方形区（c × c），画面被对角线一分为二，两侧内容沿对角线严格对称。
+ * - br（主对角线 \）：斜线下方 x≥y 保留原内容，上方 x<y 填充转置镜像 source(y,x)
+ * - tl（副对角线 /）：斜线下方 x+y≥c-1 保留原内容，上方 x+y<c-1 填充镜像 source(c-1-y, c-1-x)
+ * 输出为完整方形画面，无透明区域。
+ * 实现：先整块复制（斜线一侧保留原内容），再逐像素覆盖另一侧三角，Uint32 视角批量读写提速。
  * @param {CanvasRenderingContext2D} ctx 目标画布上下文
  * @param {*} source 源图（canvas 或 Image）
  * @param {number} sx 源 x
  * @param {number} sy 源 y
- * @param {number} sw 源宽（= 源高，方形）
- * @param {number} sh 源高
- * @param {number} dx 目标 x
- * @param {number} dy 目标 y
- * @param {boolean} flip180 先 180° 旋转再转置（用于副对角线 \/ 方向）
+ * @param {number} c 方形区边长
+ * @param {'br'|'tl'} direction 主/副对角线
  */
-function drawTransposed (ctx, source, sx, sy, sw, sh, dx, dy, flip180) {
-  const size = sw
+function drawDiagonalMirror (ctx, source, sx, sy, c, direction) {
   const tmp = document.createElement('canvas')
-  tmp.width = size
-  tmp.height = size
+  tmp.width = c
+  tmp.height = c
   const tctx = tmp.getContext('2d')
-  tctx.drawImage(source, sx, sy, size, size, 0, 0, size, size)
-  if (flip180) {
-    tctx.save()
-    tctx.translate(size, size)
-    tctx.scale(-1, -1)
-    tctx.drawImage(tmp, 0, 0)
-    tctx.restore()
-  }
-  const data = tctx.getImageData(0, 0, size, size).data
-  const compW = ctx.canvas.width
-  const compData = ctx.getImageData(0, 0, compW, ctx.canvas.height)
-  const dst = compData.data
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const si = (y * size + x) * 4
-      const di = ((dy + x) * compW + (dx + y)) * 4
-      dst[di] = data[si]
-      dst[di + 1] = data[si + 1]
-      dst[di + 2] = data[si + 2]
-      dst[di + 3] = data[si + 3]
+  tctx.drawImage(source, sx, sy, c, c, 0, 0, c, c)
+  const src = tctx.getImageData(0, 0, c, c).data
+  // 先整块复制：斜线一侧保留原内容，另一侧待覆盖
+  const dst = new Uint8ClampedArray(src)
+  const src32 = new Uint32Array(src.buffer)
+  const dst32 = new Uint32Array(dst.buffer)
+  if (direction === 'br') {
+    // 主对角线 y=x：覆盖上方三角（x<y）为 source(y,x)
+    for (let y = 0; y < c; y++) {
+      for (let x = 0; x < y; x++) {
+        dst32[y * c + x] = src32[x * c + y]
+      }
+    }
+  } else {
+    // 副对角线 x+y=c-1：覆盖上方三角（x+y<c-1）为 source(c-1-y, c-1-x)
+    for (let y = 0; y < c; y++) {
+      const limit = c - 1 - y
+      for (let x = 0; x < limit; x++) {
+        dst32[y * c + x] = src32[(c - 1 - x) * c + (c - 1 - y)]
+      }
     }
   }
-  ctx.putImageData(compData, 0, 0)
+  tctx.putImageData(new ImageData(dst, c, c), 0, 0)
+  ctx.drawImage(tmp, 0, 0)
 }
 
 export function mirrorFrame (sourceCanvas, direction, ratio, keepOriginalSize, maxEdge, backgroundColor) {
