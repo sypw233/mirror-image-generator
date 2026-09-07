@@ -11,6 +11,14 @@ const FALLBACK_KEY = { r: 255, g: 0, b: 255, num: 0xff00ff }
 function yieldToUI () {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
+/** 检查是否已取消；已取消时抛 AbortError，使处理链快速退出 */
+function throwIfAborted (signal) {
+  if (signal && signal.aborted) {
+    const err = new Error('处理已取消')
+    err.name = 'AbortError'
+    throw err
+  }
+}
 
 export function isGifBuffer (buffer) {
   const bytes = new Uint8Array(buffer)
@@ -165,15 +173,26 @@ function replaceTransparent (canvas, key) {
  * @param {number} ratio 镜像比例 1-100
  * @param {boolean} keepOriginalSize
  * @param {(p:number)=>void} onProgress 0-100
- * @param {{workerScript?:string, workers?:number}} [options]
+ * @param {{workerScript?:string, workers?:number, signal?:AbortSignal, quality?:number, colors?:number}} [options]
+ *   quality: gif.js 采样质量 1-30（越小越精细），默认 10
+ *   colors: 全局调色板颜色上限，默认 256
  */
 export async function processGif (arrayBuffer, direction, ratio, keepOriginalSize, onProgress, options = {}) {
+  const signal = options.signal
+  const quality = Math.min(30, Math.max(1, options.quality ?? 10))
+  const colorLimit = Math.min(256, Math.max(16, options.colors ?? 256))
   const gif = parseGIF(arrayBuffer)
   const frames = decompressFrames(gif, true)
   const total = frames.length
   if (total === 0) {
     throw new Error('GIF 不包含有效帧')
   }
+  // 大图保护：防止超大 GIF（画布大 × 帧多）导致浏览器卡死
+  const canvasPixels = gif.lsd.width * gif.lsd.height
+  if (canvasPixels > 25_000_000 || canvasPixels * total > 200_000_000) {
+    throw new Error(`GIF 尺寸过大（画布 ${gif.lsd.width}×${gif.lsd.height} × ${total} 帧），可能导致卡顿，请先压缩图片`)
+  }
+  throwIfAborted(signal)
 
   // 1. 全画幅合成（处理局部帧与 disposal）
   const composed = composeFrames(gif, frames)
@@ -182,6 +201,7 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
   // 2. 逐帧镜像
   const canvases = []
   for (let i = 0; i < total; i++) {
+    throwIfAborted(signal)
     const fullCanvas = imageDataToCanvas(composed[i])
     const mirrored = mirrorFrame(fullCanvas, direction, ratio, keepOriginalSize)
     // gifuct 已将 gce.delay(厘秒) 转为毫秒，最小 100ms
@@ -192,35 +212,45 @@ export async function processGif (arrayBuffer, direction, ratio, keepOriginalSiz
   }
 
   // 3. 颜色扫描 + 透明键
-  const { map: colorMap, overflow } = scanColors(canvases, 255)
+  const { map: colorMap, overflow } = scanColors(canvases, colorLimit)
   const key = pickTransparentKey(colorMap)
   const useGlobalPalette = !overflow
 
   // 4. 透明像素替换为透明键色
   for (let i = 0; i < canvases.length; i++) {
+    throwIfAborted(signal)
     replaceTransparent(canvases[i].canvas, key)
     if (i % 3 === 2) await yieldToUI()
   }
 
   // 5. 编码
+  throwIfAborted(signal)
   const first = canvases[0].canvas
   const encoderOptions = {
     workers: options.workers ?? 4,
-    quality: 10,
+    quality,
     width: first.width,
     height: first.height,
     workerScript: options.workerScript ?? workerUrl,
     transparent: key.num
   }
   if (useGlobalPalette) {
-    // 全局调色板：实际颜色 + 透明键，补齐到 256
+    // 全局调色板：实际颜色 + 透明键，按 colorLimit 截断后补齐到 256（LSD 固定 8 位表）
     const palette = []
-    for (const rgb of colorMap.values()) palette.push(rgb[0], rgb[1], rgb[2])
+    let count = 0
+    for (const rgb of colorMap.values()) {
+      if (count >= colorLimit) break
+      palette.push(rgb[0], rgb[1], rgb[2])
+      count++
+    }
     palette.push(key.r, key.g, key.b)
     while (palette.length < 256 * 3) palette.push(0)
     encoderOptions.globalPalette = palette.slice(0, 256 * 3)
   }
   const encoder = new GIF(encoderOptions)
+  if (signal) {
+    signal.addEventListener('abort', () => encoder.abort(), { once: true })
+  }
 
   return new Promise((resolve, reject) => {
     encoder.on('finished', (blob) => {

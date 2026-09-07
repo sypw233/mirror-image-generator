@@ -8,6 +8,13 @@ import { mirrorImage } from './utils/mirror'
 import { processGif, isGifBuffer, getGifMetadata } from './utils/gifProcessor'
 import './index.css'
 
+/** GIF 输出质量档位：{quality: gif.js 采样(越小越精细), colors: 全局调色板颜色上限} */
+const GIF_QUALITY = {
+  high: { quality: 10, colors: 256 },
+  standard: { quality: 20, colors: 128 },
+  low: { quality: 30, colors: 64 }
+}
+
 export default function Mirror ({ enterAction }) {
   const [arrayBuffer, setArrayBuffer] = useState(null)
   const [fileName, setFileName] = useState('')
@@ -16,7 +23,8 @@ export default function Mirror ({ enterAction }) {
   const [controls, setControls] = useState({
     direction: 'left',
     ratio: 50,
-    keepOriginalSize: false
+    keepOriginalSize: false,
+    quality: 'high'
   })
   const [resultBlob, setResultBlob] = useState(null)
   const [progress, setProgress] = useState(0)
@@ -25,6 +33,7 @@ export default function Mirror ({ enterAction }) {
   const [resultInfo, setResultInfo] = useState(null)
   const runIdRef = useRef(0)
   const processingRef = useRef(false)
+  const abortRef = useRef(null)
   // 同步最新 processing 到 ref，供全局拖放事件读取（避免闭包捕获旧值）
   useEffect(() => {
     processingRef.current = processing
@@ -47,6 +56,10 @@ export default function Mirror ({ enterAction }) {
 
   const processImage = useCallback(async () => {
     if (!arrayBuffer) return
+    // 取消上一次未完成的处理（如滑块快速拖动时的旧任务），避免并发占用 CPU/内存
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     const runId = ++runIdRef.current
     setError('')
     setProcessing(true)
@@ -56,17 +69,23 @@ export default function Mirror ({ enterAction }) {
     try {
       let blob
       if (isGif) {
+        const q = GIF_QUALITY[controls.quality] || GIF_QUALITY.high
         blob = await processGif(
           arrayBuffer,
           controls.direction,
           controls.ratio,
           controls.keepOriginalSize,
-          setProgress
+          setProgress,
+          { signal: controller.signal, quality: q.quality, colors: q.colors }
         )
       } else {
         // 让出主线程，先让“处理中”状态绘制出来
         await new Promise((resolve) => setTimeout(resolve, 0))
         const img = await loadImage(arrayBuffer)
+        // 大图保护：防止超大静态图导致浏览器卡死
+        if (img.naturalWidth * img.naturalHeight > 50_000_000) {
+          throw new Error(`图片尺寸过大（${img.naturalWidth}×${img.naturalHeight}），可能导致卡顿，请先压缩图片`)
+        }
         const canvas = mirrorImage(
           img,
           controls.direction,
@@ -82,6 +101,8 @@ export default function Mirror ({ enterAction }) {
       if (runId !== runIdRef.current) return
       setResultInfo(info)
     } catch (err) {
+      // 主动取消（新任务已接管）时不打扰用户
+      if (err?.name === 'AbortError') return
       console.error('处理失败:', err)
       if (runId !== runIdRef.current) return
       const msg = err?.message || '图片处理失败'
@@ -148,6 +169,7 @@ export default function Mirror ({ enterAction }) {
   }, [])
 
   const handleImageLoad = (buffer, name) => {
+    abortRef.current?.abort() // 取消进行中的处理
     runIdRef.current++ // 使进行中的旧处理失效
     setArrayBuffer(buffer)
     setFileName(name)
@@ -180,6 +202,7 @@ export default function Mirror ({ enterAction }) {
   }
 
   const handleReset = () => {
+    abortRef.current?.abort() // 取消进行中的处理
     runIdRef.current++
     setArrayBuffer(null)
     setFileName('')
@@ -215,7 +238,7 @@ export default function Mirror ({ enterAction }) {
             )}
           </div>
           {error && <div className='mirror-error'>{error}</div>}
-          <MirrorControls onChange={handleControlsChange} disabled={processing} />
+          <MirrorControls onChange={handleControlsChange} disabled={processing} showQuality={isGif} />
           {processing && (
             <div className='mirror-progress'>
               <div className='mirror-progress-bar'>

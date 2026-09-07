@@ -34,13 +34,16 @@
   <script type="module">
     import { parseGIF, decompressFrames } from 'gifuct-js'
     import { processGif } from '/src/Mirror/utils/gifProcessor.js'
+
     const results = []
     let failures = 0
+
     function record (name, params, assertion, expected, actual, pass) {
       if (!pass) failures++
       results.push({ name, params, assertion, expected: JSON.stringify(expected), actual: JSON.stringify(actual), pass })
       renderRow(results.length - 1)
     }
+
     function renderRow (i) {
       const r = results[i]
       const tbody = document.querySelector('#results tbody')
@@ -54,19 +57,28 @@
         <td><span class="badge ${r.pass ? 'pass' : 'fail'}">${r.pass ? 'PASS' : 'FAIL'}</span></td>`
       tbody.appendChild(tr)
     }
+
+    // 素材以 base64 文本形式存放于 public/fixtures/*.b64，运行时解码为二进制，
+    // 这样克隆仓库后无需二进制文件也能运行全部测试。
     async function fetchBuffer (path) {
       const res = await fetch(path)
-      const ab = await res.arrayBuffer()
-      return ab
+      const b64 = await res.text()
+      const binary = atob(b64.trim())
+      const bytes = new Uint8Array(binary.length)
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+      return bytes.buffer
     }
+
     function parseOut (buffer) {
       const gif = parseGIF(buffer)
       const frames = decompressFrames(gif, true)
       return { gif, frames }
     }
+
     const logEl = document.getElementById('log')
-    async function runCase (name, file, direction, ratio, keep, checks) {
-      const ab = await fetchBuffer('/test/' + file)
+
+    async function runCase (name, file, direction, ratio, keep, checks, opts) {
+      const ab = await fetchBuffer('/fixtures/' + file + '.b64')
       const inp = parseOut(ab)
       logEl.textContent += `\n[${name}] 输入 canvas=${inp.gif.lsd.width}x${inp.gif.lsd.height} frames=${inp.frames.length}\n`
       inp.frames.forEach((f, i) => {
@@ -74,7 +86,7 @@
       })
       const t0 = performance.now()
       let progress = []
-      const blob = await processGif(ab, direction, ratio, keep, (p) => progress.push(p))
+      const blob = await processGif(ab, direction, ratio, keep, (p) => progress.push(p), opts || {})
       const t1 = performance.now()
       const out = parseOut(await blob.arrayBuffer())
       logEl.textContent += `  输出 canvas=${out.gif.lsd.width}x${out.gif.lsd.height} frames=${out.frames.length} 耗时=${(t1 - t0).toFixed(0)}ms progress=${progress.join(',')}\n`
@@ -84,6 +96,7 @@
       const params = `${direction} ${ratio}% keep=${keep}`
       await checks(inp, out, params)
     }
+
     // 像素对称校验：加载一张图到 canvas，检查镜像对称性
     function frameToCanvas (frame, canvasW, canvasH) {
       // 用帧 patch 构建完整画布（测试用简化：直接把 patch 放 0,0）
@@ -95,6 +108,7 @@
       ctx.putImageData(img, frame.dims.left, frame.dims.top)
       return c
     }
+
     const checks_full = async (inp, out) => {
       const p = 'left 50% keep=false'
       // 帧数一致
@@ -125,6 +139,7 @@
       }
       record('full.gif', p, '右半区为左半区镜像（抽样）', '对称', sym ? '对称' : '不对称', sym)
     }
+
     const checks_transparent = async (inp, out) => {
       const p = 'left 50% keep=false'
       // 关键回归：局部帧场景下，输出帧应为全画幅（当前 bug 会输出小尺寸帧）
@@ -144,12 +159,14 @@
       const hasTransparent = transparentCount > 0 && transparentCount < total
       record('transparent.gif', p, '输出保留透明背景（既有透明又有不透明像素）', true, hasTransparent, hasTransparent)
     }
+
     const checks_delay = async (inp, out) => {
       const p = 'left 50% keep=false'
       const inDelays = inp.frames.map(f => f.delay)
       const outDelays = out.frames.map(f => f.delay)
       record('delay.gif', p, '帧延迟保持 [100,300,50]', inDelays, outDelays, JSON.stringify(inDelays) === JSON.stringify(outDelays))
     }
+
     // ===== 执行 =====
     try {
       await runCase('full.gif', 'full.gif', 'left', 50, false, checks_full)
@@ -165,7 +182,7 @@
         ['full.gif', 'left', 100, true, '120x80']
       ]
       for (const [file, dir, ratio, keep, expect] of dimsCases) {
-        const ab = await fetchBuffer('/test/' + file)
+        const ab = await fetchBuffer('/fixtures/' + file + '.b64')
         const blob = await processGif(ab, dir, ratio, keep, () => {})
         const out = parseOut(await blob.arrayBuffer())
         const actual = `${out.gif.lsd.width}x${out.gif.lsd.height}`
@@ -173,7 +190,7 @@
       }
       // 保持原尺寸 + 100%：内容应等比缩放居中（contain），而非裁切
       {
-        const ab = await fetchBuffer('/test/full.gif')
+        const ab = await fetchBuffer('/fixtures/full.gif.b64')
         const blob = await processGif(ab, 'left', 100, true, () => {})
         const out = parseOut(await blob.arrayBuffer())
         const f0 = out.frames[0]
@@ -189,10 +206,34 @@
         const fitOk = topAlpha === 0 && centerAlpha === 255
         record('保持原尺寸-100%', 'left 100% keep=true', '内容等比缩放居中（顶部留白、中心有内容）', '留白+内容', `top=${topAlpha} center=${centerAlpha}`, fitOk)
       }
+      // 质量档位：低档（64 色 / quality=30）输出仍可解析且结构正确
+      {
+        const ab = await fetchBuffer('/fixtures/full.gif.b64')
+        const blob = await processGif(ab, 'left', 50, false, () => {}, { quality: 30, colors: 64 })
+        const out = parseOut(await blob.arrayBuffer())
+        const okFrame = out.frames.length === 3 && out.gif.lsd.width === 120 && out.gif.lsd.height === 80
+        record('质量-低档', 'left 50% quality=30 colors=64', '输出可解析：3 帧、画布 120x80', '3帧 120x80', `${out.frames.length}帧 ${out.gif.lsd.width}x${out.gif.lsd.height}`, okFrame)
+      }
+      // AbortSignal：已中止的信号应立即抛 AbortError（快速失败）
+      {
+        const ab = await fetchBuffer('/fixtures/full.gif.b64')
+        const ctrl = new AbortController()
+        ctrl.abort()
+        let threw = false
+        let isAbort = false
+        try {
+          await processGif(ab, 'left', 50, false, () => {}, { signal: ctrl.signal })
+        } catch (err) {
+          threw = true
+          isAbort = err?.name === 'AbortError'
+        }
+        record('取消-已中止信号', 'signal 已 abort', '立即抛 AbortError', true, threw && isAbort, threw && isAbort)
+      }
     } catch (err) {
       logEl.textContent += '\n[致命错误] ' + (err && err.stack || err)
       record('全局', '-', '无异常', '无异常', String(err && err.message || err), false)
     }
+
     // 汇总
     const sum = document.getElementById('summary')
     if (failures === 0) {

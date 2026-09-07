@@ -7,6 +7,11 @@ const DIRECTIONS = [
   { key: 'bottom', label: '下对称', icon: '▼' }
 ]
 const RATIO_PRESETS = [25, 50, 75, 100]
+const QUALITY_OPTIONS = [
+  { key: 'high', label: '高质量', hint: '256 色' },
+  { key: 'standard', label: '标准', hint: '128 色' },
+  { key: 'low', label: '小体积', hint: '64 色' }
+]
 const STORAGE_KEY = 'mirror.settings'
 /** 从 localStorage 恢复上次设置；解析失败或字段非法时回退默认值 */
 function loadSettings () {
@@ -17,41 +22,47 @@ function loadSettings () {
     return {
       direction: DIRECTIONS.some((d) => d.key === s.direction) ? s.direction : 'left',
       ratio: Math.min(100, Math.max(1, Number(s.ratio) || 50)),
-      keepOriginalSize: !!s.keepOriginalSize
+      keepOriginalSize: !!s.keepOriginalSize,
+      quality: QUALITY_OPTIONS.some((q) => q.key === s.quality) ? s.quality : 'high'
     }
   } catch (err) {
     return null
   }
 }
-function saveSettings (direction, ratio, keepOriginalSize) {
+function saveSettings (direction, ratio, keepOriginalSize, quality) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ direction, ratio, keepOriginalSize }))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ direction, ratio, keepOriginalSize, quality }))
   } catch (err) {
     // 隐私模式等环境下 localStorage 不可用，忽略即可
   }
 }
-export default function MirrorControls ({ onChange, disabled = false }) {
+export default function MirrorControls ({ onChange, disabled = false, showQuality = false }) {
   const saved = loadSettings()
   const [direction, setDirection] = useState(saved?.direction || 'left')
   const [ratio, setRatio] = useState(saved?.ratio || 50)
   const [keepOriginalSize, setKeepOriginalSize] = useState(saved?.keepOriginalSize || false)
-  const emitChange = (dir, r, keep) => {
-    saveSettings(dir, r, keep)
-    onChange({ direction: dir, ratio: r, keepOriginalSize: keep })
+  const [quality, setQuality] = useState(saved?.quality || 'high')
+  const emitChange = (dir, r, keep, q) => {
+    saveSettings(dir, r, keep, q)
+    onChange({ direction: dir, ratio: r, keepOriginalSize: keep, quality: q })
   }
   const handleDirection = (dir) => {
     setDirection(dir)
-    emitChange(dir, ratio, keepOriginalSize)
+    emitChange(dir, ratio, keepOriginalSize, quality)
   }
   const handleRatio = (r) => {
     const value = Math.min(100, Math.max(1, r))
     setRatio(value)
-    emitChange(direction, value, keepOriginalSize)
+    emitChange(direction, value, keepOriginalSize, quality)
   }
   const handleKeepSize = (e) => {
     const keep = e.target.checked
     setKeepOriginalSize(keep)
-    emitChange(direction, ratio, keep)
+    emitChange(direction, ratio, keep, quality)
+  }
+  const handleQuality = (q) => {
+    setQuality(q)
+    emitChange(direction, ratio, keepOriginalSize, q)
   }
   return (
     <div className='mirror-controls'>
@@ -103,6 +114,24 @@ export default function MirrorControls ({ onChange, disabled = false }) {
           ))}
         </div>
       </div>
+      {showQuality && (
+        <div className='mirror-control-group mirror-quality-group'>
+          <label className='mirror-control-label'>GIF 输出质量</label>
+          <div className='mirror-presets'>
+            {QUALITY_OPTIONS.map((q) => (
+              <button
+                key={q.key}
+                className={`mirror-preset-btn ${quality === q.key ? 'active' : ''}`}
+                onClick={() => handleQuality(q.key)}
+                disabled={disabled}
+                title={q.hint}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className='mirror-control-group mirror-control-row'>
         <label className='mirror-checkbox'>
           <input
