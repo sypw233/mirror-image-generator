@@ -7,8 +7,15 @@
  * - tl/br       ：对角线镜像（原块 + 转置块），取方形裁剪区，输出为 2c × 2c 正方形，
  *                 br 沿主对角线（\）对称展开，tl 沿副对角线（/）对称展开
  * - keepOriginalSize：输出保持原图尺寸，组合结果等比缩放（仅当超出时缩小）并居中，避免裁切
+ * - backgroundColor：非空时输出不透明，所有透明区域（源图透明 / 空白象限 / 缩放留白）填充该颜色
+ * @param {CanvasImageSource} imageData canvas 或 Image
+ * @param {string} direction left|right|top|bottom|tl|br
+ * @param {number} ratio 镜像比例 1-100
+ * @param {boolean} keepOriginalSize 保持原图尺寸
+ * @param {number} [maxEdge] 导出长边上限，超出等比缩小
+ * @param {string|null} [backgroundColor] 背景色（#rrggbb 或 null=透明）
  */
-export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxEdge) {
+export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxEdge, backgroundColor) {
   const { width: srcW, height: srcH } = imageData
   const r = ratio / 100
   let clipX = 0
@@ -46,11 +53,15 @@ export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxE
   const compW = isHorizontal ? clipW * 2 : isDiagonal ? clipW * 2 : srcW
   const compH = isVertical ? clipH * 2 : isDiagonal ? clipH * 2 : srcH
 
-  // 组合画布：原块 + 翻转块
+  // 组合画布：原块 + 翻转块（背景色时先铺底，透明区域显示背景色）
   const comp = document.createElement('canvas')
   comp.width = compW
   comp.height = compH
   const ctx = comp.getContext('2d')
+  if (backgroundColor) {
+    ctx.fillStyle = backgroundColor
+    ctx.fillRect(0, 0, compW, compH)
+  }
 
   if (isDiagonal) {
     const c = clipW
@@ -90,6 +101,10 @@ export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxE
     out.width = srcW
     out.height = srcH
     const octx = out.getContext('2d')
+    if (backgroundColor) {
+      octx.fillStyle = backgroundColor
+      octx.fillRect(0, 0, srcW, srcH)
+    }
     const scale = Math.min(1, srcW / compW, srcH / compH)
     const dw = compW * scale
     const dh = compH * scale
@@ -121,7 +136,7 @@ export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxE
  * @param {number} sh 源高
  * @param {number} dx 目标 x
  * @param {number} dy 目标 y
- * @param {boolean} flip180 先 180° 旋转再转置（用于副对角线 / 方向）
+ * @param {boolean} flip180 先 180° 旋转再转置（用于副对角线 \/ 方向）
  */
 function drawTransposed (ctx, source, sx, sy, sw, sh, dx, dy, flip180) {
   const size = sw
@@ -154,6 +169,6 @@ function drawTransposed (ctx, source, sx, sy, sw, sh, dx, dy, flip180) {
   ctx.putImageData(compData, 0, 0)
 }
 
-export function mirrorFrame (sourceCanvas, direction, ratio, keepOriginalSize, maxEdge) {
-  return mirrorImage(sourceCanvas, direction, ratio, keepOriginalSize, maxEdge)
+export function mirrorFrame (sourceCanvas, direction, ratio, keepOriginalSize, maxEdge, backgroundColor) {
+  return mirrorImage(sourceCanvas, direction, ratio, keepOriginalSize, maxEdge, backgroundColor)
 }
