@@ -200,32 +200,32 @@
     }
     // ===== 对角线镜像（斜切）断言 =====
     {
-      // br 50%：30x30，取源图右下角 c×c，副对角线（/）斜切，右上三角保留原内容
+      // br 50%：30x30，取源图右下角 c×c，副对角线（/）斜切，右下三角保留原内容（镜像到左上三角）
       const out = mirrorImage(SRC, 'br', 50, false) // c = min(80,60)×0.5 = 30，裁剪区 = 源图 (50,30)-(80,60)
       const okSize = out.width === 30 && out.height === 30
       record('对角尺寸-br50', 'br 50% keep=false', '输出为 c×c 方形（30x30）', '30x30', `${out.width}x${out.height}`, okSize)
       const { sym, checked } = checkAntiDiagSym(out)
       record('对角对称-br', 'br 50% keep=false', '沿副对角线 x+y=c-1 对称（抽样 ' + checked + ' 点）', true, sym, sym)
-      // 内容：源图右下黄块（裁剪区坐标 (5,10)-(25,25)）在右上三角（x+y<c-1）保留
+      // 内容：右下黄块在右下三角（x+y>c-1）原内容保留、沿副对角线镜像到左上三角（x+y<c-1）；采样 (5,10) 为镜像黄块
       const d = pixels(out)
       const yellowKeep = same(colorAt(d, out.width, 5, 10), YELLOW)
-      record('对角内容-br', 'br 50% keep=false', '右下黄块在右上三角保留（原内容在斜线一侧）', true, yellowKeep, yellowKeep)
+      record('对角内容-br', 'br 50% keep=false', '右下黄块在右下三角保留（右下角镜像到左上角）', true, yellowKeep, yellowKeep)
       // 无透明：斜切画面为完整方形
       let alpha0 = 0
       for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
       record('对角无透明-br', 'br 50% keep=false', '画面无透明像素（两半拼满）', 0, alpha0, alpha0 === 0)
     }
     {
-      // tl 50%：30x30，取源图左上角 c×c，主对角线（\）斜切，右下三角保留原内容
+      // tl 50%：30x30，取源图左上角 c×c，主对角线（\）斜切，左上三角保留原内容（镜像到右下三角）
       const out = mirrorImage(SRC, 'tl', 50, false) // 裁剪区 = 源图 (0,0)-(30,30)
       const okSize = out.width === 30 && out.height === 30
       record('对角尺寸-tl50', 'tl 50% keep=false', '输出为 c×c 方形（30x30）', '30x30', `${out.width}x${out.height}`, okSize)
       const { sym, checked } = checkMainDiagSym(out)
       record('对角对称-tl', 'tl 50% keep=false', '沿主对角线 y=x 对称（抽样 ' + checked + ' 点）', true, sym, sym)
-      // 内容：源图左上红块（裁剪区坐标 (5,5)-(24,19)）在右下三角（x>y）保留（采样 (20,8)，避开斜线）
+      // 内容：源图左上红块在左上三角（x<y）原内容保留（采样 (10,16)，避开斜线），右下三角为镜像
       const d = pixels(out)
-      const redKeep = same(colorAt(d, out.width, 20, 8), RED)
-      record('对角内容-tl', 'tl 50% keep=false', '左上红块在右下三角保留（原内容在斜线一侧）', true, redKeep, redKeep)
+      const redKeep = same(colorAt(d, out.width, 10, 16), RED)
+      record('对角内容-tl', 'tl 50% keep=false', '左上红块在左上三角保留（左上角镜像到右下角）', true, redKeep, redKeep)
       let alpha0 = 0
       for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
       record('对角无透明-tl', 'tl 50% keep=false', '画面无透明像素（两半拼满）', 0, alpha0, alpha0 === 0)
