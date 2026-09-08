@@ -101,9 +101,14 @@ export default function ImagePreview ({ originalUrl, resultBlob, isGif, info, pr
                     >
                       {(direction === 'left' || direction === 'right') && <div className='mirror-axis-line mirror-axis-v' />}
                       {(direction === 'top' || direction === 'bottom') && <div className='mirror-axis-line mirror-axis-h' />}
-                      {(direction === 'br' || direction === 'tl') && (
+                      {(direction === 'tl') && (
                         <svg className='mirror-axis-svg' viewBox='0 0 100 100' preserveAspectRatio='none'>
                           <line x1='0' y1='0' x2='100' y2='100' />
+                        </svg>
+                      )}
+                      {(direction === 'br') && (
+                        <svg className='mirror-axis-svg' viewBox='0 0 100 100' preserveAspectRatio='none'>
+                          <line x1='100' y1='0' x2='0' y2='100' />
                         </svg>
                       )}
                     </div>

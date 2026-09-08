@@ -101,7 +101,7 @@
       }
       return { sym, checked }
     }
-    // 主对角线对称（tl/br，沿 y=x）：pixel(x,y) == pixel(y,x)
+    // 主对角线对称（tl，沿 y=x）：pixel(x,y) == pixel(y,x)
     function checkMainDiagSym (canvas) {
       const d = pixels(canvas)
       const S = canvas.width
@@ -110,6 +110,20 @@
         for (let x = y + 1; x < S; x += 2) {
           checked++
           if (!same(colorAt(d, S, x, y), colorAt(d, S, y, x))) { sym = false; break }
+        }
+        if (!sym) break
+      }
+      return { sym, checked }
+    }
+    // 副对角线对称（br，沿 x+y=S-1）：pixel(x,y) == pixel(S-1-y, S-1-x)
+    function checkAntiDiagSym (canvas) {
+      const d = pixels(canvas)
+      const S = canvas.width
+      let sym = true, checked = 0
+      for (let y = 0; y < S; y += 2) {
+        for (let x = 0; x < S - 1 - y; x += 2) {
+          checked++
+          if (!same(colorAt(d, S, x, y), colorAt(d, S, S - 1 - y, S - 1 - x))) { sym = false; break }
         }
         if (!sym) break
       }
@@ -186,32 +200,32 @@
     }
     // ===== 对角线镜像（斜切）断言 =====
     {
-      // br 50%：30x30，取源图右下角 c×c，主对角线斜切，右下三角保留原内容
+      // br 50%：30x30，取源图右下角 c×c，副对角线（/）斜切，右上三角保留原内容
       const out = mirrorImage(SRC, 'br', 50, false) // c = min(80,60)×0.5 = 30，裁剪区 = 源图 (50,30)-(80,60)
       const okSize = out.width === 30 && out.height === 30
       record('对角尺寸-br50', 'br 50% keep=false', '输出为 c×c 方形（30x30）', '30x30', `${out.width}x${out.height}`, okSize)
-      const { sym, checked } = checkMainDiagSym(out)
-      record('对角对称-br', 'br 50% keep=false', '沿主对角线 y=x 对称（抽样 ' + checked + ' 点）', true, sym, sym)
-      // 内容：源图右下黄块（裁剪区坐标 (5,10)-(25,25)）在右下三角（x>y）保留
+      const { sym, checked } = checkAntiDiagSym(out)
+      record('对角对称-br', 'br 50% keep=false', '沿副对角线 x+y=c-1 对称（抽样 ' + checked + ' 点）', true, sym, sym)
+      // 内容：源图右下黄块（裁剪区坐标 (5,10)-(24,24)）在右上三角（x+y<c-1）保留
       const d = pixels(out)
-      const yellowKeep = same(colorAt(d, out.width, 15, 10), YELLOW)
-      record('对角内容-br', 'br 50% keep=false', '右下黄块在右下三角保留（原内容在斜线一侧）', true, yellowKeep, yellowKeep)
+      const yellowKeep = same(colorAt(d, out.width, 5, 10), YELLOW)
+      record('对角内容-br', 'br 50% keep=false', '右下黄块在右上三角保留（原内容在斜线一侧）', true, yellowKeep, yellowKeep)
       // 无透明：斜切画面为完整方形
       let alpha0 = 0
       for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
       record('对角无透明-br', 'br 50% keep=false', '画面无透明像素（两半拼满）', 0, alpha0, alpha0 === 0)
     }
     {
-      // tl 50%：30x30，取源图左上角 c×c，主对角线斜切，左上三角保留原内容
+      // tl 50%：30x30，取源图左上角 c×c，主对角线（\）斜切，右下三角保留原内容
       const out = mirrorImage(SRC, 'tl', 50, false) // 裁剪区 = 源图 (0,0)-(30,30)
       const okSize = out.width === 30 && out.height === 30
       record('对角尺寸-tl50', 'tl 50% keep=false', '输出为 c×c 方形（30x30）', '30x30', `${out.width}x${out.height}`, okSize)
       const { sym, checked } = checkMainDiagSym(out)
       record('对角对称-tl', 'tl 50% keep=false', '沿主对角线 y=x 对称（抽样 ' + checked + ' 点）', true, sym, sym)
-      // 内容：源图左上红块（裁剪区坐标 (5,5)-(25,20)）在左上三角（x<y）保留
+      // 内容：源图左上红块（裁剪区坐标 (5,5)-(24,19)）在右下三角（x>y）保留（采样 (20,8)，避开斜线）
       const d = pixels(out)
-      const redKeep = same(colorAt(d, out.width, 5, 10), RED)
-      record('对角内容-tl', 'tl 50% keep=false', '左上红块在左上三角保留（原内容在斜线一侧）', true, redKeep, redKeep)
+      const redKeep = same(colorAt(d, out.width, 20, 8), RED)
+      record('对角内容-tl', 'tl 50% keep=false', '左上红块在右下三角保留（原内容在斜线一侧）', true, redKeep, redKeep)
       let alpha0 = 0
       for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
       record('对角无透明-tl', 'tl 50% keep=false', '画面无透明像素（两半拼满）', 0, alpha0, alpha0 === 0)
@@ -221,8 +235,8 @@
       const outBr = mirrorImage(SRC, 'br', 100, false)
       const brSize = outBr.width === 60 && outBr.height === 60
       record('对角尺寸-br100', 'br 100% keep=false', '输出 c×c 方形（60x60）', '60x60', `${outBr.width}x${outBr.height}`, brSize)
-      const { sym: brSym } = checkMainDiagSym(outBr)
-      record('对角对称-br100', 'br 100% keep=false', '主对角线对称', true, brSym, brSym)
+      const { sym: brSym } = checkAntiDiagSym(outBr)
+      record('对角对称-br100', 'br 100% keep=false', '副对角线对称', true, brSym, brSym)
       const outTl = mirrorImage(SRC, 'tl', 100, false)
       const tlSize = outTl.width === 60 && outTl.height === 60
       record('对角尺寸-tl100', 'tl 100% keep=false', '输出 c×c 方形（60x60）', '60x60', `${outTl.width}x${outTl.height}`, tlSize)
@@ -298,7 +312,7 @@
       const d = pixels(out)
       let alpha0 = 0
       for (let i = 3; i < d.length; i += 4) { if (d[i] === 0) alpha0++ }
-      const yellowKeep = same(colorAt(d, out.width, 15, 10), YELLOW)
+      const yellowKeep = same(colorAt(d, out.width, 5, 10), YELLOW)
       record('背景-对角br-红', 'br 50% bg=#ff0000', '斜切主体无透明且右下黄块保留', '无 alpha=0 + 黄块在', `alpha0=${alpha0} yellow=${yellowKeep}`, alpha0 === 0 && yellowKeep)
     }
     {

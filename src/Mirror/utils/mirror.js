@@ -5,7 +5,8 @@
  * - left/right  ：水平镜像（原块 + 水平翻转块），输出宽度 = 2 × 裁剪宽
  * - top/bottom  ：垂直镜像（原块 + 垂直翻转块），输出高度 = 2 × 裁剪高
  * - tl/br       ：对角线镜像（斜切），取方形裁剪区（边长 c = min(宽,高) × ratio），输出 c × c 方形，
- *                 沿主对角线（\）斜切：tl 保留左上三角原内容（取源图左上角）、br 保留右下三角原内容（取源图右下角），
+ *                 tl 取源图左上角、沿主对角线（\）斜切（右下三角保留原内容），
+ *                 br 取源图右下角、沿副对角线（/）斜切（右上三角保留原内容），
  *                 另一侧填充对角镜像，两侧沿对角线严格对称、无透明区域
  * - keepOriginalSize：输出保持原图尺寸，组合结果等比缩放（仅当超出时缩小）并居中，避免裁切
  * - backgroundColor：非空时输出不透明，所有透明区域（源图透明 / 缩放留白）填充该颜色
@@ -121,9 +122,9 @@ export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxE
 }
 
 /**
- * 对角线"斜切"镜像：取方形区（c × c），画面被主对角线（\）一分为二，两侧内容沿对角线严格对称。
- * - br（右下对称）：保留右下三角（x>y）原内容，左上三角（x<y）填充转置镜像 source(y,x)
- * - tl（左上对称）：保留左上三角（x<y）原内容，右下三角（x>y）填充转置镜像 source(y,x)
+ * 对角线"斜切"镜像：取方形区（c × c），画面被对角线一分为二，两侧内容沿对角线严格对称。
+ * - tl（左上对称）：沿主对角线（\）斜切，右下三角（x>y）保留原内容，左上三角（x<y）填充转置镜像 source(y,x)
+ * - br（右下对称）：沿副对角线（/）斜切，右上三角（x+y>c-1）保留原内容，左上三角（x+y<c-1）填充转置镜像 source(c-1-y, c-1-x)
  * 输出为完整方形画面，无透明区域。
  * 实现：先整块复制（保留角一侧为原内容），再逐像素覆盖另一侧三角，Uint32 视角批量读写提速。
  * @param {CanvasRenderingContext2D} ctx 目标画布上下文
@@ -131,7 +132,7 @@ export function mirrorImage (imageData, direction, ratio, keepOriginalSize, maxE
  * @param {number} sx 源 x
  * @param {number} sy 源 y
  * @param {number} c 方形区边长
- * @param {'br'|'tl'} direction 右下对称 / 左上对称
+ * @param {'tl'|'br'} direction 左上对称 / 右下对称
  */
 function drawDiagonalMirror (ctx, source, sx, sy, c, direction) {
   const tmp = document.createElement('canvas')
@@ -144,18 +145,19 @@ function drawDiagonalMirror (ctx, source, sx, sy, c, direction) {
   const dst = new Uint8ClampedArray(src)
   const src32 = new Uint32Array(src.buffer)
   const dst32 = new Uint32Array(dst.buffer)
-  if (direction === 'br') {
-    // 右下对称：覆盖左上三角（x<y）为 source(y,x)
+  if (direction === 'tl') {
+    // 左上对称：沿主对角线（\），覆盖左上三角（x<y）为 source(y,x)，右下三角保留原内容
     for (let y = 0; y < c; y++) {
       for (let x = 0; x < y; x++) {
         dst32[y * c + x] = src32[x * c + y]
       }
     }
   } else {
-    // 左上对称：覆盖右下三角（x>y）为 source(y,x)
+    // 右下对称：沿副对角线（/），覆盖左上三角（x+y<c-1）为 source(c-1-y, c-1-x)，右上三角保留原内容
     for (let y = 0; y < c; y++) {
-      for (let x = y + 1; x < c; x++) {
-        dst32[y * c + x] = src32[x * c + y]
+      const limit = c - 1 - y
+      for (let x = 0; x < limit; x++) {
+        dst32[y * c + x] = src32[(c - 1 - x) * c + (c - 1 - y)]
       }
     }
   }
