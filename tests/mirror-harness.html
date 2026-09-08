@@ -206,7 +206,7 @@
       record('对角尺寸-br50', 'br 50% keep=false', '输出为 c×c 方形（30x30）', '30x30', `${out.width}x${out.height}`, okSize)
       const { sym, checked } = checkAntiDiagSym(out)
       record('对角对称-br', 'br 50% keep=false', '沿副对角线 x+y=c-1 对称（抽样 ' + checked + ' 点）', true, sym, sym)
-      // 内容：源图右下黄块（裁剪区坐标 (5,10)-(24,24)）在右上三角（x+y<c-1）保留
+      // 内容：源图右下黄块（裁剪区坐标 (5,10)-(25,25)）在右上三角（x+y<c-1）保留
       const d = pixels(out)
       const yellowKeep = same(colorAt(d, out.width, 5, 10), YELLOW)
       record('对角内容-br', 'br 50% keep=false', '右下黄块在右上三角保留（原内容在斜线一侧）', true, yellowKeep, yellowKeep)
